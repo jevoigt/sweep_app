@@ -42,7 +42,7 @@ const storage = {
   remove(key) { memoryStorage.delete(key); try { localStorage.removeItem(key); } catch {} },
 };
 const music = new GameMusic({ storage, onChange: updateMusicControl });
-const effects = new ExplosionSound({ storage });
+const effects = new ExplosionSound();
 const journal = new DailyJournal(storage);
 const tileGestures = new TileGestures({
   onHold: tile => {
@@ -168,8 +168,8 @@ function renderHome() {
     <section class="hero" aria-labelledby="home-title">
       <img src="/field.svg" alt="A cheerful Minesweeper mine with a smiling face">
       <div class="hero-copy"><div class="eyebrow">THE MULTIPLAYER MINESWEEPER CLUB</div>
-        <h1 id="home-title">Small mine.<br>Big rivalries.</h1><p>Bring your nerve.<br>And up to seven friends.</p></div>
-      <div class="hero-chip"><span aria-hidden="true">☺</span><div><small>THE CHALLENGE</small><strong>One board. Up to eight players.</strong></div></div>
+        <h1 id="home-title">Small mine.<br>Big rivalries.</h1><p>Bring your nerve.<br>And up to eleven friends.</p></div>
+      <div class="hero-chip"><span aria-hidden="true">☺</span><div><small>THE CHALLENGE</small><strong>One board. Up to twelve players.</strong></div></div>
     </section>
     <section class="section">
       <div class="name-row"><label class="field-label" for="player-name">What should we call you?</label>
@@ -187,7 +187,7 @@ function renderHome() {
       </div>
       ${lastStoredSession ? `<div class="resume-box">Have an unfinished rivalry?<button id="resume">Return to room ${esc(lastStoredSession.code)}</button></div>` : ''}
       <div class="mini-row"><div class="mini-card"><span class="mini-icon" aria-hidden="true">▦</span><div><strong>Identical boards</strong><small>A fair start, every time</small></div></div>
-        <div class="mini-card"><span class="mini-icon" aria-hidden="true">◷</span><div><strong>2–8 players</strong><small>Room for your rivals</small></div></div></div>
+        <div class="mini-card"><span class="mini-icon" aria-hidden="true">◷</span><div><strong>2–12 players</strong><small>Room for your rivals</small></div></div></div>
     </section>`;
 }
 
@@ -232,7 +232,7 @@ function renderLobby() {
   const me = you(), host = me.id === state.host;
   if (host && state.difficulty === 'custom' && !editingCustom) customDraft = { rows: state.rows, columns: state.columns, mines: state.mines };
   const allReady = state.players.length >= 2 && state.players.every(p => p.ready);
-  app.innerHTML = `<section class="room-heading"><div class="eyebrow">YOUR PRIVATE FIELD · ${state.players.length} / ${state.maxPlayers} PLAYERS</div><h1>Bring a little competition.</h1><p>Invite up to seven friends.<br>The host starts when everyone is ready.</p></section>
+  app.innerHTML = `<section class="room-heading"><div class="eyebrow">YOUR PRIVATE FIELD · ${state.players.length} / ${state.maxPlayers} PLAYERS</div><h1>Bring a little competition.</h1><p>Invite up to eleven friends.<br>The host starts when everyone is ready.</p></section>
     <section class="invite-card"><div class="eyebrow">INVITE CODE</div><div class="invite-code">${esc(state.code)}</div>
       <div class="invite-buttons"><button id="copy-code" class="button light">Copy code</button><button id="share" class="button light">Share invite</button></div></section>
     <section class="lobby-settings"><fieldset class="difficulty-picker"><legend class="field-label">${host ? 'Your board · changing it resets everyone’s Ready' : 'The host’s board choice'}</legend>${difficultyButtons(editingCustom ? 'custom' : state.difficulty, !host || !connected)}</fieldset>${host && (editingCustom || state.difficulty === 'custom') ? customFields(true) : ''}<p class="small-note">${state.difficulty === 'custom' ? `${boardDescription()}. ` : ''}Rows × columns. All tiles start hidden. Your first click can hit a mine.</p></section>
@@ -246,7 +246,7 @@ function renderLobby() {
 function raceMessage() {
   if (state.kind === 'daily') {
     const me = you();
-    if (state.phase === 'finished') return `<div class="race-message ${state.reason === 'cleared' ? 'result' : 'warning'}" role="status"><strong>${state.reason === 'cleared' ? `Cleared in ${formatDuration(state.endAt - state.startAt)}.` : state.reason === 'mine' ? 'An explosive finish.' : 'Calling it a day.'}</strong>${state.reason === 'cleared' ? 'All 216 safe tiles cleared.' : `${me.revealed}/256 total tiles revealed (safe tiles only).`} Attempt #${dailyAttempt}. Copy your results or try the same board again.</div>`;
+    if (state.phase === 'finished') return `<div class="race-message ${state.reason === 'cleared' ? 'result' : 'loss'}" role="status"><strong>${state.reason === 'cleared' ? `Cleared in ${formatDuration(state.endAt - state.startAt)}.` : state.reason === 'mine' ? 'An explosive finish.' : 'Calling it a day.'}</strong>${state.reason === 'cleared' ? 'All 216 safe tiles cleared.' : `${me.revealed}/256 total tiles revealed (safe tiles only).`} Attempt #${dailyAttempt}. Copy your results or try the same board again.</div>`;
     return '<div class="race-message"><strong>Today’s shared field.</strong>All tiles start hidden. Your first click can hit a mine. The timer keeps running when you switch tabs.</div>';
   }
   const me = you(), others = rivals();
@@ -260,7 +260,7 @@ function raceMessage() {
       forfeit: 'The other players conceded the race.',
     };
     const tiedNames = state.players.filter(p => state.leaders.includes(p.id)).map(p => esc(p.name)).join(', ');
-    return `<div class="race-message result" role="status"><strong>${title}</strong>${details[state.reason] || ''} ${!winner ? tiedNames ? `Draw: ${tiedNames}.` : 'No winner this time.' : ''}</div>`;
+    return `<div class="race-message ${winner ? winner.id === me.id ? 'result' : 'loss' : state.leaders.includes(me.id) ? 'warning' : 'loss'}" role="status"><strong>${title}</strong>${details[state.reason] || ''} ${!winner ? tiedNames ? `Draw: ${tiedNames}.` : 'No winner this time.' : ''}</div>`;
   }
   if (state.phase === 'countdown') return '<div class="race-message"><strong>A hidden field.</strong>Every tile stays covered when the countdown ends. Mines can be anywhere, including your first click.</div>';
   if (me.forfeited) return '<div class="race-message warning" role="status"><strong>You conceded.</strong>You can watch the remaining players finish the race.</div>';
@@ -283,7 +283,7 @@ function renderBoard() {
     app.innerHTML = `<div class="status-strip"><span class="room-id">${daily ? `DAILY ${state.date} · TRY ${dailyAttempt}` : `${esc(state.code)} · ROUND ${state.round}`}</span><span class="timer" id="clock">00:00</span></div>
       <section class="scoreboard" id="scores" aria-label="Live scores. Swipe to see all players."></section>
       ${daily ? '<p class="daily-run-note">Shared daily board · resets at midnight EST (UTC−5)</p>' : `<details class="standings"><summary>All ${state.players.length} players · standings</summary><div id="standings-list"></div></details>`}
-      <div class="board-heading"><div class="board-info">${esc(boardDescription())}</div><div class="sound-controls"><button id="effects-toggle" class="music-toggle" type="button" aria-label="Mute explosion sounds">✹ Sound on</button><button id="music-toggle" class="music-toggle" type="button">♫ Music on</button></div></div>
+      <div class="board-heading"><div class="board-info">${esc(boardDescription())}</div><div class="sound-controls"><button id="music-toggle" class="music-toggle" type="button">♫ Music on</button></div></div>
       <p class="now-playing" id="now-playing" role="status" aria-live="polite"></p>
       <div class="touch-instructions"><p>Tap to reveal.<br>Hold to flag or unflag.</p><span class="mines-left" id="flags-left"></span></div>
       <div class="zoom-tools" role="group" aria-label="Board zoom"><button id="zoom-out" class="zoom-button" aria-label="Zoom out">−</button><output id="zoom-label">Fit</output><button id="zoom-in" class="zoom-button" aria-label="Zoom in">+</button><button id="zoom-fit" class="zoom-button text-zoom">Fit</button></div>
@@ -323,16 +323,8 @@ function renderBoard() {
   connection.textContent = connected ? 'Connected' : 'Reconnecting…'; connection.classList.toggle('offline', !connected);
   applyZoom();
   updateMusicControl();
-  updateEffectsControl();
 }
 
-function updateEffectsControl() {
-  const button = document.querySelector('#effects-toggle');
-  if (!button) return;
-  button.textContent = effects.enabled ? '✹ Sound on' : '✹ Sound off';
-  button.setAttribute('aria-label', effects.enabled ? 'Mute explosion sounds' : 'Enable explosion sounds');
-  button.setAttribute('aria-pressed', String(effects.enabled));
-}
 
 function pauseView() {
   generation++; clearTimeout(pollTimer); tileGestures.cancel(); session = null; state = null; renderKey = ''; boardLayout = '';
@@ -518,7 +510,6 @@ app.addEventListener('click', async event => {
     case 'ready': music.unlock(); effects.unlock(); move('ready'); break;
     case 'start-race': music.unlock(); effects.unlock(); move('start'); break;
     case 'music-toggle': music.toggle(); break;
-    case 'effects-toggle': effects.toggle(); updateEffectsControl(); break;
     case 'apply-custom': { const custom = validatedCustom(); if (custom) { editingCustom = false; move('settings', undefined, { difficulty: 'custom', custom }); } break; }
     case 'reload-daily': case 'today-daily': openDaily(); break;
     case 'start-daily': case 'retry-daily': startDaily(); break;

@@ -1,23 +1,17 @@
 export class ExplosionSound {
-  constructor({ storage, createContext } = {}) {
-    this.storage = storage; this.enabled = storage?.get('sweep-effects') !== 'off';
+  constructor({ createContext } = {}) {
     this.createContext = createContext || (() => new (globalThis.AudioContext || globalThis.webkitAudioContext)());
     this.context = null;
   }
   unlock() {
-    if (!this.enabled) return;
     try {
       this.context ||= this.createContext();
       if (this.context.state !== 'running') Promise.resolve(this.context.resume()).catch(() => {});
     } catch {} // Audio must never block a move on unsupported browsers.
   }
-  toggle() {
-    this.enabled = !this.enabled; this.storage?.set('sweep-effects', this.enabled ? 'on' : 'off');
-    if (this.enabled) this.unlock();
-  }
   play() {
     const context = this.context;
-    if (!this.enabled || !context || context.state !== 'running') return false;
+    if (!context || context.state !== 'running') return false;
     try {
       const now = context.currentTime, duration = .65;
       const buffer = context.createBuffer(1, Math.floor(context.sampleRate * duration), context.sampleRate);

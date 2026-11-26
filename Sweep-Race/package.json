@@ -1,8 +1,8 @@
 {
   "name": "sweep-race",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
-  "description": "Daily Minesweeper and 2\u20138 player races with custom boards up to 50 by 50.",
+  "description": "Daily Minesweeper and 2\u201312 player races with custom boards up to 50 by 50.",
   "type": "module",
   "engines": {
     "node": "22.x"

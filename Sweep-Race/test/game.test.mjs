@@ -37,8 +37,8 @@ for (const [difficulty, settings] of Object.entries(BOARD_OPTIONS)) {
     for (const i of [0, middle, last]) assert.equal(board[i], -1);
   });
 
-  test(`${difficulty}: all eight players start fully hidden on the same board with independent progress`, () => {
-    const { room } = fixture(8, difficulty); room.phase = 'lobby';
+  test(`${difficulty}: all twelve players start fully hidden on the same board with independent progress`, () => {
+    const { room } = fixture(12, difficulty); room.phase = 'lobby';
     for (const p of room.players) act(room, p, { type: 'ready' }, 1100);
     assert.equal(room.phase, 'lobby', 'ready does not start early while more invites may be joining');
     act(room, room.players[0], { type: 'start' }, 1200);
@@ -57,10 +57,10 @@ for (const [difficulty, settings] of Object.entries(BOARD_OPTIONS)) {
   });
 }
 
-test('eight seats are available; a ninth player is rejected', () => {
-  const { room } = fixture(8); room.phase = 'lobby';
+test('twelve seats are available; a thirteenth player is rejected', () => {
+  const { room } = fixture(12); room.phase = 'lobby';
   assert.equal(room.players.length, MAX_PLAYERS);
-  assert.throws(() => joinRoom(room, 'Ninth', 1500), /eight players/);
+  assert.throws(() => joinRoom(room, 'Thirteenth', 1500), /twelve players/);
 });
 
 test('host controls start; two or more players and everyone ready are required', () => {
@@ -89,7 +89,7 @@ test('only the host can change boards in the lobby; changing clears readiness', 
 });
 
 test('a mine freezes a score and leaves all other players able to continue', () => {
-  const { room, a } = fixture(8); score(room, a, 20);
+  const { room, a } = fixture(12); score(room, a, 20);
   act(room, a, { type: 'reveal', index: room.board.indexOf(-1) }, 2000);
   assert.equal(room.phase, 'playing'); assert.notEqual(a.hit, null);
   assert.throws(() => act(room, a, { type: 'flag', index: 0 }, 2100), /score is frozen/);
@@ -137,8 +137,8 @@ test('equal highest frozen scores draw; lower scores are not listed as leaders',
   assert.equal(a.wins, 0);
 });
 
-test('first full clear ends an eight-player race and rejects subsequent moves', () => {
-  const { room, a, b } = fixture(8, 'hard'); const last = numbered(room);
+test('first full clear ends a twelve-player race and rejects subsequent moves', () => {
+  const { room, a, b } = fixture(12, 'hard'); const last = numbered(room);
   a.revealed = new Set(safeIndices(room).filter(i => i !== last));
   act(room, a, { type: 'reveal', index: last }, 2000);
   assert.equal(room.winner, a.id); assert.equal(room.reason, 'cleared'); assert.equal(a.wins, 1);
@@ -146,9 +146,9 @@ test('first full clear ends an eight-player race and rejects subsequent moves', 
 });
 
 test('leaving a lobby frees a seat and transfers the host', () => {
-  const { room, a, b } = fixture(8); room.phase = 'lobby';
-  leaveRoom(room, a, 1200); assert.equal(room.players.length, 7); assert.equal(room.host, b.id);
-  joinRoom(room, 'Replacement', 1300); assert.equal(room.players.length, 8);
+  const { room, a, b } = fixture(12); room.phase = 'lobby';
+  leaveRoom(room, a, 1200); assert.equal(room.players.length, 11); assert.equal(room.host, b.id);
+  joinRoom(room, 'Replacement', 1300); assert.equal(room.players.length, 12);
 });
 
 test('leaving after hitting a mine preserves the frozen score', () => {

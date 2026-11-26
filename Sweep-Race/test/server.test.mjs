@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createGameServer } from '../server.mjs';
 
-test('HTTP eight-player lifecycle: selection, capacity, host start, scores, fresh lobby and stale moves', async t => {
+test('HTTP twelve-player lifecycle: selection, capacity, host start, scores, fresh lobby and stale moves', async t => {
   const server = createGameServer();
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
@@ -18,14 +18,14 @@ test('HTTP eight-player lifecycle: selection, capacity, host start, scores, fres
   const host = await req('/api/rooms', { name: 'Host', difficulty: 'hard' });
   assert.equal(host.status, 201); assert.equal(host.data.state.rows, 30); assert.equal(host.data.state.mines, 99);
   const path = '/api/rooms/' + host.data.state.code, players = [host.data];
-  for (let i = 1; i < 8; i++) {
+  for (let i = 1; i < 12; i++) {
     const guest = await req(path + '/join', { name: `Guest ${i}` });
     assert.equal(guest.status, 201); players.push(guest.data);
   }
-  assert.equal((await req(path + '/join', { name: 'Ninth' })).status, 409);
+  assert.equal((await req(path + '/join', { name: 'Thirteenth' })).status, 409);
   assert.equal((await req(path)).status, 401);
   const state = await req(path, null, host.data.token);
-  assert.equal(state.data.players.length, 8); assert.ok(state.data.board.every(v => v === -2));
+  assert.equal(state.data.players.length, 12); assert.ok(state.data.board.every(v => v === -2));
   assert.equal(JSON.stringify(state.data).includes(players[1].token), false);
   const action = (p, type, extra = {}) => req(path + '/actions', { type, round: 1, ...extra }, p.token);
   assert.equal((await action(players[1], 'start')).status, 403);
@@ -39,8 +39,8 @@ test('HTTP eight-player lifecycle: selection, capacity, host start, scores, fres
   const replay = await action(players[0], 'lobby');
   assert.equal(replay.data.round, 2); assert.equal(replay.data.phase, 'lobby');
   assert.equal((await action(players[0], 'reveal', { index: 0 })).status, 409);
-  assert.equal((await req(path + '/leave', {}, players[7].token)).status, 200);
-  assert.equal((await req(path, null, players[7].token)).status, 401);
+  assert.equal((await req(path + '/leave', {}, players[11].token)).status, 200);
+  assert.equal((await req(path, null, players[11].token)).status, 401);
   assert.equal((await req(path + '/join', { name: 'New guest' })).status, 201);
   const rejected = await fetch(base + path + '/actions', { method: 'POST', headers: { Origin: 'https://unrelated.example', Authorization: `Bearer ${host.data.token}` }, body: '{}' });
   assert.equal(rejected.status, 403);

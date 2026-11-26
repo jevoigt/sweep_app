@@ -1,6 +1,6 @@
 import { randomInt, randomBytes } from 'node:crypto';
 
-export const MAX_PLAYERS = 8;
+export const MAX_PLAYERS = 12;
 export const COUNTDOWN_MS = 3000;
 export const BOARD_OPTIONS = Object.freeze({
   easy: Object.freeze({ name: 'Easy', rows: 9, columns: 9, mines: 10 }),
@@ -127,7 +127,7 @@ export function advance(room, now = Date.now()) {
 export function joinRoom(room, name, now = Date.now()) {
   if (room.kind === 'daily') throw new GameError('Daily puzzles are solo. Create a multiplayer room to race friends.', 409);
   advance(room, now);
-  if (room.players.filter(p => !p.left).length >= MAX_PLAYERS) throw new GameError('This room already has eight players.', 409);
+  if (room.players.filter(p => !p.left).length >= MAX_PLAYERS) throw new GameError('This room already has twelve players.', 409);
   if (room.phase !== 'lobby') throw new GameError('This race has already started.', 409);
   const player = newPlayer(name, now);
   room.players.push(player); room.revision++; room.touchedAt = now;

@@ -22,16 +22,8 @@ The updated project is in **Downloads/Sweep-Race**. Its files are ready to uploa
 
 ## What changed in this update
 
-The supplied five MP3 files replace the synthesized background music. Playback order is Kokiri Forest → Shop → Market → Kakariko Village → Ocarina of Time → repeat. Each new game/attempt starts the sequence again. The lobby, countdown, and results remain silent; mute and the separate explosion effect remain available.
+Rooms now support up to **12 players**. Completed-game messages are green for a win, red for a loss, and amber for tied leaders. Daily failures also use red.
 
-**Upload the whole updated folder contents**, including:
+Explosion sound effects are always enabled, including for players who previously muted them. The **Music** button is the only audio control. The five-track playlist and its remembered music preference remain.
 
-- `public/music/` with **all five MP3 files** (about 10.3 MiB total).
-- The new `public/playlist.js` manifest.
-- Updated `public/music.js`, `public/app.js`, `server.mjs`, styles, and tests.
-
-Each MP3 is below GitHub’s browser-upload per-file limit. Keep the existing folder structure: the assets should appear at `Sweep-Race/public/music/` in your current repository. Upload the extracted files and folders, not a ZIP file as a single repository file.
-
-No extra music service, database, API key, or package install is required. Keep Render’s Build Command as `npm test` and Start Command as `npm start`. Music streaming uses hosting bandwidth. Your game URL stays unchanged.
-
-Existing Daily puzzles, per-browser attempt counts, custom boards, eight-player races, and tap/hold controls remain. Deployments still reset active in-memory runs.
+Upload the complete updated folder contents, including the existing five files in `public/music/`. Keep Render’s settings above and redeploy the latest commit. No additional service or dependency is required.
