@@ -7,8 +7,8 @@
  <filter id="shadow" x="-50%" y="-50%" width="200%" height="220%"><feDropShadow dx="0" dy="18" stdDeviation="14" flood-color="#2f4b31" flood-opacity=".2"/></filter>
 </defs>
 <rect width="900" height="610" fill="url(#bg)"/>
-<ellipse cx="639" cy="538" rx="180" ry="26" fill="#6b8753" opacity=".13"/>
-<g transform="translate(640 338) rotate(10)" filter="url(#shadow)">
+<ellipse cx="639" cy="478" rx="126" ry="18" fill="#6b8753" opacity=".13"/>
+<g transform="translate(640 338) rotate(10) scale(.7)" filter="url(#shadow)">
  <g fill="url(#spike)" stroke="#45644b" stroke-width="2">
   <path d="m-25-124 6-88q19-11 38 0l6 88Z"/><path d="m-25-124 6-88q19-11 38 0l6 88Z" transform="rotate(45)"/><path d="m-25-124 6-88q19-11 38 0l6 88Z" transform="rotate(90)"/><path d="m-25-124 6-88q19-11 38 0l6 88Z" transform="rotate(135)"/><path d="m-25-124 6-88q19-11 38 0l6 88Z" transform="rotate(180)"/><path d="m-25-124 6-88q19-11 38 0l6 88Z" transform="rotate(225)"/><path d="m-25-124 6-88q19-11 38 0l6 88Z" transform="rotate(270)"/><path d="m-25-124 6-88q19-11 38 0l6 88Z" transform="rotate(315)"/>
  </g>

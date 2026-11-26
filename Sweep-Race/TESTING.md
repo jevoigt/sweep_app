@@ -33,7 +33,7 @@ After deploying, test on two or more devices; use twelve participants for the ca
 - [ ] Easy has 9 rows × 9 columns / 10 mines; Medium 16 × 16 / 40; Hard 30 rows × 16 columns / 99.
 - [ ] Native Share Invite includes the deployed HTTPS URL; joining by code or link works.
 - [ ] Up to twelve players can join; a thirteenth is rejected.
-- [ ] Ready alone does not start early; the host starts only when at least two players have joined and everyone is ready.
+- [ ] Ready alone does not start early; the host can start alone once ready, or start a multiplayer race when everyone is ready.
 - [ ] Changing board choice resets every player’s Ready state.
 - [ ] Every player starts with all tiles hidden and a zero score. Mines can occur anywhere, and a first-click mine is allowed.
 - [ ] A quick tap reveals exactly once; a stationary hold flags exactly once and does not reveal on release.
@@ -88,3 +88,7 @@ Browser playback verification passed with the actual MP3 files: Kokiri Forest st
 The twelve-client HTTP lifecycle covers capacity, readiness, host start, winner resolution, seat replacement, and stale moves. Explosion tests include old muted preferences and muted music. Completed games show green for the winner, red for losses, and amber for tied leaders.
 
 Browser verification for this update: twelve players joined, the host started the race, only the Music control appeared, and the host’s completed win used the green result class. The browser stalled during the concession flow, so visual confirmation of the red loss state remains outstanding. Real iOS audio behavior still requires device testing.
+
+Solo regression checks cover the host-only countdown, safe reveals and flagging without an early win, clearing the board, hitting a mine, conceding, replaying, and HTTP start authorization.
+
+Version 1.7: 74 automated tests passed. Browser verification confirmed the homepage “2–12 players / Or play solo” label, an enabled “Start race · 1 player” control after Ready, and the active solo board.

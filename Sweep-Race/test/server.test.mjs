@@ -61,3 +61,19 @@ test('HTTP daily endpoints expose Medium metadata, private solo state, and end o
  for(const asset of ['/effects.js','/daily-results.js'])assert.equal((await fetch(base+asset)).status,200);
  const invalid=await fetch(base+'/api/rooms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Host',difficulty:'custom',custom:{rows:50,columns:50,mines:2501}})});assert.equal(invalid.status,400);
 });
+
+test('HTTP host can start a solo game and clearing it awards a win', async t => {
+  const server = createGameServer();
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const created = await fetch(base+'/api/rooms', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Solo',difficulty:'custom',custom:{rows:1,columns:1,mines:0}})});
+  const player = await created.json(), path = base+'/api/rooms/'+player.state.code+'/actions';
+  const action = type => fetch(path,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${player.token}`},body:JSON.stringify({type,round:1,index:0})});
+  assert.equal((await action('start')).status,409);
+  await action('ready');
+  const started=await action('start'); assert.equal(started.status,200); assert.equal((await started.json()).phase,'countdown');
+  await new Promise(resolve=>setTimeout(resolve,3050));
+  const ended=await(await action('reveal')).json();
+  assert.equal(ended.phase,'finished'); assert.equal(ended.winner,player.state.you); assert.equal(ended.reason,'cleared');
+});

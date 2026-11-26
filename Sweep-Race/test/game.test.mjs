@@ -63,13 +63,13 @@ test('twelve seats are available; a thirteenth player is rejected', () => {
   assert.throws(() => joinRoom(room, 'Thirteenth', 1500), /twelve players/);
 });
 
-test('host controls start; two or more players and everyone ready are required', () => {
+test('host controls start and everyone must be ready, including a solo host', () => {
   const room = createRoom('ABC234', 'Host', 1000), host = room.players[0];
-  act(room, host, { type: 'ready' }, 1001);
-  assert.throws(() => act(room, host, { type: 'start' }, 1002), /At least two/);
+  assert.throws(() => act(room, host, { type: 'start' }, 1001), /must be ready/);
+  act(room, host, { type: 'ready' }, 1002);
   const guest = joinRoom(room, 'Guest', 1003);
   assert.throws(() => act(room, guest, { type: 'start' }, 1004), /Only the host/);
-  assert.throws(() => act(room, host, { type: 'start' }, 1005), /everyone must be ready/);
+  assert.throws(() => act(room, host, { type: 'start' }, 1005), /everyone must be ready/i);
   act(room, guest, { type: 'ready' }, 1006);
   act(room, host, { type: 'start' }, 1007);
   assert.equal(room.phase, 'countdown');
@@ -224,4 +224,37 @@ test('a first-click mine freezes a zero score without relocating any mines', () 
   assert.deepEqual(room.board, original); assert.equal(room.phase, 'playing');
   const state = view(room, a, 2001);
   assert.equal(state.board[mine], -1);
+});
+
+for (const difficulty of ['easy', 'medium', 'hard']) {
+  test(`solo ${difficulty}: countdown, safe moves and flags do not award an early win; a mine ends the attempt`, () => {
+    const room = createRoom('SOLO23', 'Solo', 1000, difficulty), player = room.players[0];
+    act(room, player, {type:'ready'}, 1001);
+    act(room, player, {type:'start'}, 1002);
+    assert.equal(room.phase, 'countdown');
+    advance(room, 1002 + COUNTDOWN_MS);
+    act(room, player, {type:'flag', index:room.board.indexOf(-1)}, 5000);
+    assert.equal(room.phase, 'playing'); assert.equal(room.winner, null);
+    act(room, player, {type:'reveal', index:numbered(room)}, 5001);
+    assert.equal(room.phase, 'playing');
+    act(room, player, {type:'flag', index:room.board.indexOf(-1)}, 5002);
+    act(room, player, {type:'reveal', index:room.board.indexOf(-1)}, 5003);
+    assert.equal(room.phase, 'finished'); assert.equal(room.reason, 'mine');
+    assert.equal(room.winner, null); assert.equal(player.wins, 0);
+    act(room, player, {type:'lobby'}, 5004);
+    assert.equal(room.phase, 'lobby'); assert.equal(room.round, 2); assert.equal(player.ready, false);
+  });
+}
+
+test('solo clear wins and solo concession loses', () => {
+  const {room, a} = fixture(1), last = numbered(room);
+  a.revealed = new Set(safeIndices(room).filter(i => i !== last));
+  act(room, a, {type:'reveal', index:last}, 2000);
+  assert.equal(room.winner, a.id); assert.equal(a.wins, 1);
+  act(room, a, {type:'lobby'}, 2001);
+  act(room, a, {type:'ready'}, 2002);
+  act(room, a, {type:'start'}, 2003);
+  act(room, a, {type:'forfeit'}, 2004);
+  assert.equal(room.phase, 'finished'); assert.equal(room.reason, 'abandoned');
+  assert.equal(room.winner, null); assert.equal(a.wins, 1);
 });

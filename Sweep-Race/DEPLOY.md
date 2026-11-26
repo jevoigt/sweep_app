@@ -63,7 +63,7 @@ After you deploy, new pushes to the connected branch can automatically redeploy 
 
 1. Open the deployed URL on your iPhone. Enter your name and tap **Create race**.
 2. Tap **Share invite** and send the link to a friend on a different device.
-3. They enter their name and tap **Join**. Invite up to seven friends in total.
+3. They enter their name and tap **Join**. Invite up to eleven friends in total.
 4. Everyone taps **I’m ready**, then the host taps **Start race**. You should get the same board with every tile hidden. Your first click can hit a mine.
 5. Play a round and a rematch. Try app-switching and returning to Safari.
 

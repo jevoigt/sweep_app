@@ -27,3 +27,7 @@ Rooms now support up to **12 players**. Completed-game messages are green for a 
 Explosion sound effects are always enabled, including for players who previously muted them. The **Music** button is the only audio control. The five-track playlist and its remembered music preference remain.
 
 Upload the complete updated folder contents, including the existing five files in `public/music/`. Keep Render’s settings above and redeploy the latest commit. No additional service or dependency is required.
+
+## Solo play update
+
+Hosts can start with one ready player. A solo game ends on clearing all safe tiles, hitting a mine, or conceding. Multiplayer races still support twelve players. The homepage shows “2–12 players” and “Or play solo”; reload the page after deploying this upload.

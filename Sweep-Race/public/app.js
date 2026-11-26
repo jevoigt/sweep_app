@@ -168,8 +168,7 @@ function renderHome() {
     <section class="hero" aria-labelledby="home-title">
       <img src="/field.svg" alt="A cheerful Minesweeper mine with a smiling face">
       <div class="hero-copy"><div class="eyebrow">THE MULTIPLAYER MINESWEEPER CLUB</div>
-        <h1 id="home-title">Small mine.<br>Big rivalries.</h1><p>Bring your nerve.<br>And up to eleven friends.</p></div>
-      <div class="hero-chip"><span aria-hidden="true">☺</span><div><small>THE CHALLENGE</small><strong>One board. Up to twelve players.</strong></div></div>
+        <h1 id="home-title">Small mine.<br>Big rivalries.</h1></div>
     </section>
     <section class="section">
       <div class="name-row"><label class="field-label" for="player-name">What should we call you?</label>
@@ -187,7 +186,7 @@ function renderHome() {
       </div>
       ${lastStoredSession ? `<div class="resume-box">Have an unfinished rivalry?<button id="resume">Return to room ${esc(lastStoredSession.code)}</button></div>` : ''}
       <div class="mini-row"><div class="mini-card"><span class="mini-icon" aria-hidden="true">▦</span><div><strong>Identical boards</strong><small>A fair start, every time</small></div></div>
-        <div class="mini-card"><span class="mini-icon" aria-hidden="true">◷</span><div><strong>2–12 players</strong><small>Room for your rivals</small></div></div></div>
+        <div class="mini-card"><span class="mini-icon" aria-hidden="true">◷</span><div><strong>2–12 players</strong><small>Or play solo</small></div></div></div>
     </section>`;
 }
 
@@ -231,15 +230,15 @@ function renderRace() {
 function renderLobby() {
   const me = you(), host = me.id === state.host;
   if (host && state.difficulty === 'custom' && !editingCustom) customDraft = { rows: state.rows, columns: state.columns, mines: state.mines };
-  const allReady = state.players.length >= 2 && state.players.every(p => p.ready);
-  app.innerHTML = `<section class="room-heading"><div class="eyebrow">YOUR PRIVATE FIELD · ${state.players.length} / ${state.maxPlayers} PLAYERS</div><h1>Bring a little competition.</h1><p>Invite up to eleven friends.<br>The host starts when everyone is ready.</p></section>
+  const allReady = state.players.every(p => p.ready);
+  app.innerHTML = `<section class="room-heading"><div class="eyebrow">YOUR PRIVATE FIELD · ${state.players.length} / ${state.maxPlayers} PLAYERS</div><h1>Bring a little competition.</h1><p>Play solo or invite up to eleven friends.<br>The host starts when everyone is ready.</p></section>
     <section class="invite-card"><div class="eyebrow">INVITE CODE</div><div class="invite-code">${esc(state.code)}</div>
       <div class="invite-buttons"><button id="copy-code" class="button light">Copy code</button><button id="share" class="button light">Share invite</button></div></section>
     <section class="lobby-settings"><fieldset class="difficulty-picker"><legend class="field-label">${host ? 'Your board · changing it resets everyone’s Ready' : 'The host’s board choice'}</legend>${difficultyButtons(editingCustom ? 'custom' : state.difficulty, !host || !connected)}</fieldset>${host && (editingCustom || state.difficulty === 'custom') ? customFields(true) : ''}<p class="small-note">${state.difficulty === 'custom' ? `${boardDescription()}. ` : ''}Rows × columns. All tiles start hidden. Your first click can hit a mine.</p></section>
     <div class="players">${state.players.map(p => `<div class="player-card"><div class="avatar ${p.id === me.id ? '' : 'rival'}">${esc(p.name[0].toUpperCase())}</div><div class="player-info"><strong>${esc(p.name)}${p.id === me.id ? ' (you)' : ''}</strong><small>${p.id === state.host ? 'Host · ' : ''}${p.online ? 'In the clubhouse' : 'Reconnecting…'}</small></div><span class="player-status ${p.ready ? 'ready' : ''}">${p.ready ? '✓ Ready' : 'Not ready'}</span></div>`).join('')}</div>
     <div class="section"><button id="ready" class="button ${me.ready ? 'light' : 'green'} full" ${!connected ? 'disabled' : ''}>${me.ready ? 'Ready ✓ · tap to cancel' : 'I’m ready'}</button>
       ${host ? `<button id="start-race" class="button blue full start-race" ${!allReady || !connected ? 'disabled' : ''}>Start race · ${state.players.length} ${state.players.length === 1 ? 'player' : 'players'}</button>` : ''}
-      <p class="lobby-note">${host ? 'Invite everyone first. Once all players are ready, tap Start race for the shared countdown.' : 'Mark yourself ready. The host will start the shared countdown.'}</p>
+      <p class="lobby-note">${host ? 'Play solo or invite your friends. Once everyone is ready, tap Start race for the countdown.' : 'Mark yourself ready. The host will start the shared countdown.'}</p>
       <div class="race-footer"><button id="leave" class="text-button">Leave room</button><span class="connection ${connected ? '' : 'offline'}">${connected ? 'Connected' : 'Reconnecting…'}</span></div></div>`;
 }
 
@@ -250,6 +249,10 @@ function raceMessage() {
     return '<div class="race-message"><strong>Today’s shared field.</strong>All tiles start hidden. Your first click can hit a mine. The timer keeps running when you switch tabs.</div>';
   }
   const me = you(), others = rivals();
+  if (state.players.length === 1 && state.phase === 'finished') {
+    const won = state.winner === me.id;
+    return `<div class="race-message ${won ? 'result' : 'loss'}" role="status"><strong>${won ? 'This field is yours.' : state.reason === 'mine' ? 'An explosive finish.' : 'Calling it a day.'}</strong>${won ? 'All safe tiles cleared. That’s a clean sweep.' : `${me.revealed} / ${state.safe} safe tiles revealed.`}</div>`;
+  }
   if (state.phase === 'finished') {
     const winner = state.players.find(p => p.id === state.winner);
     const title = !winner ? 'An even match.' : winner.id === me.id ? 'This field is yours.' : `${esc(winner.name)} takes the field.`;
@@ -270,6 +273,7 @@ function raceMessage() {
     const target = Math.max(...frozen.map(p => p.revealed)) + 1;
     return `<div class="race-message warning" role="status"><strong>${frozen.length} frozen ${frozen.length === 1 ? 'score' : 'scores'}.</strong>${active.length ? `Keep racing ${active.length} other active ${active.length === 1 ? 'player' : 'players'}. A full clear wins immediately.` : `You’re the last survivor. Reveal ${Math.max(0, target - me.revealed)} more safe tiles to beat every frozen score.`}</div>`;
   }
+  if (state.players.length === 1) return '<div class="race-message"><strong>Your own little field.</strong>Clear every safe tile to win. Hitting a mine ends your attempt.</div>';
   return '<div class="race-message"><strong>Every safe tile counts.</strong>First to clear wins. Hitting a mine freezes your score while the remaining players keep going.</div>';
 }
 

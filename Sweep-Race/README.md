@@ -1,6 +1,6 @@
 # Sweep Race
 
-Live Minesweeper races for **2–12 players**, with private invite codes, identical boards, live scores, three preset board sizes, host-defined custom boards, and a shareable solo Daily puzzle. The mobile interface keeps its rounded cards and soft green/blue styling, with an original smiling-mine homepage illustration.
+Solo Minesweeper and live races for **2–12 players**, with private invite codes, identical boards, live scores, three preset board sizes, host-defined custom boards, and a shareable solo Daily puzzle. The mobile interface keeps its rounded cards and soft green/blue styling, with an original smiling-mine homepage illustration.
 
 **Already hosting this?** See [UPDATING.md](UPDATING.md). Upload these updated files into the same existing GitHub folder, then redeploy your existing Render service. Your public URL stays the same.
 
@@ -34,7 +34,7 @@ Every round generates a fresh random board. Mines are sampled uniformly without 
 ## Play
 
 1. Enter your name, choose a board, and create a room.
-2. Share its six-character code or invite link with up to eleven friends. A room holds at most twelve players; at least two are required to start.
+2. Share its six-character code or invite link with up to eleven friends. A room holds at most twelve players; the host can also start alone to play solo.
 3. Everyone taps **I’m ready**. When the invited group has arrived, the host taps **Start race**. Readiness alone never starts the race early.
 4. A shared three-second countdown starts the race with every tile hidden on everyone’s independent copy of the same board.
 5. Tap a tile to reveal it. Hold a covered tile still for about half a second to flag or unflag it; flags do not score. On desktop, right-click or press F on a focused tile. Arrow keys move through the board using its actual dimensions.

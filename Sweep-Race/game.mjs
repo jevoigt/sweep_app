@@ -101,7 +101,7 @@ function resolve(room, now) {
   const eligible = room.players.filter(p => !p.forfeited);
   const cleared = room.safe > 0 && eligible.find(p => p.revealed.size === room.safe);
   if (cleared) return finish(room, [cleared], 'cleared', now);
-  if (room.kind === 'daily') {
+  if (room.kind === 'daily' || room.players.length === 1) {
     const player = room.players[0];
     if (player.hit !== null) finish(room, [], 'mine', now);
     else if (player.forfeited) finish(room, [], 'abandoned', now);
@@ -158,7 +158,7 @@ export function act(room, player, action, now = Date.now()) {
   } else if (action.type === 'start') {
     if (player.id !== room.host) throw new GameError('Only the host can start the race.', 403);
     if (room.phase !== 'lobby') throw new GameError('The race has already started.', 409);
-    if (room.players.length < 2 || !room.players.every(p => p.ready)) throw new GameError('At least two players must join and everyone must be ready.', 409);
+    if (!room.players.every(p => p.ready)) throw new GameError('Everyone must be ready.', 409);
     room.phase = 'countdown'; room.startAt = now + COUNTDOWN_MS;
   } else if (action.type === 'settings') {
     if (player.id !== room.host) throw new GameError('Only the host can choose the board.', 403);
