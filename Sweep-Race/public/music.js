@@ -1,8 +1,27 @@
 import { PLAYLIST } from './playlist.js';
 
+// Room codes are random; adding the round gives each game a fresh order.
+// Deriving the shuffle from that key keeps refreshes and all players in sync.
+export function shuffledTracks(tracks, key) {
+  let seed = 2166136261;
+  for (const char of String(key)) seed = Math.imul(seed ^ char.charCodeAt(0), 16777619);
+  const random = () => {
+    seed = (seed + 0x6D2B79F5) | 0;
+    let value = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    value ^= value + Math.imul(value ^ value >>> 7, 61 | value);
+    return ((value ^ value >>> 14) >>> 0) / 4294967296;
+  };
+  const result = [...tracks];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
 export class GameMusic {
   constructor({ tracks = PLAYLIST, createAudio = () => new Audio(), createContext, now = () => Date.now(), onChange = () => {}, storage } = {}) {
-    this.tracks = tracks; this.createAudio = createAudio;
+    this.originalTracks = [...tracks]; this.tracks = [...tracks]; this.createAudio = createAudio;
     this.createContext = createContext || (() => new (globalThis.AudioContext || globalThis.webkitAudioContext)());
     this.now = now; this.onChange = onChange; this.storage = storage;
     this.enabled = storage?.get('sweep-music') !== 'off';
@@ -100,7 +119,7 @@ export class GameMusic {
 
   update({ phase, visible, connected, key, elapsedMs }) {
     if (key !== undefined && key !== this.key) {
-      this.stop(); this.key = key; this.index = 0;
+      this.stop(); this.key = key; this.tracks = shuffledTracks(this.originalTracks, key); this.index = 0;
       if (this.audio) this.select(0);
     }
     if (Number.isFinite(elapsedMs)) { this.elapsedMs = elapsedMs; this.sampledAt = this.now(); }

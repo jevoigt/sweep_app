@@ -35,3 +35,7 @@ Hosts can start with one ready player. A solo game ends on clearing all safe til
 ## Standard and One life modes
 
 In the lobby, the host chooses Standard (default) or One life. One life grants each player one protected mine hit: the mine is automatically flagged, stays pink, and cannot be unflagged. A second mine freezes their score or ends a solo attempt. A protected mine never scores as a safe tile. Mode changes reset readiness; mode stays selected for the next round and each player gets a fresh life. Daily puzzles keep Standard rules.
+
+## Shuffled game music
+
+The same five MP3s now play in a shuffled order each game, looping after all five have played. Players in the same room/round share the order; refreshing, muting, or reconnecting preserves that game’s order. New rounds and Daily attempts get a fresh shuffle.

@@ -80,7 +80,7 @@ Active runs still live in server memory. If the server restarts, the browser ret
 
 ## Gameplay MP3 playlist
 
-Each new multiplayer round or Daily attempt starts this supplied playlist in numbered filename order:
+Each new multiplayer round or Daily attempt shuffles these five supplied songs:
 
 1. Kokiri Forest — `06 Kokiri Forest.mp3`
 2. Shop — `10 Shop.mp3`
@@ -90,7 +90,7 @@ Each new multiplayer round or Daily attempt starts this supplied playlist in num
 
 After track 5, it repeats from track 1 for the rest of that game. The homepage, lobby, countdown, and result screens have no audible music. The Music button remembers mute, and the game displays the current track. Muting or switching away pauses audio; returning rejoins approximately the current game’s playlist position using the server’s elapsed timer. It is not sample-accurate synchronization across devices.
 
-The original supplied MP3s are bundled unchanged in `public/music/`; `public/playlist.js` declares order, titles, and durations. `public/music.js` controls playback. All five assets must be uploaded to GitHub and deployed with the code. The Node server streams them with byte-range/HEAD support for mobile browsers, rather than loading the entire playlist into memory. Media bytes count toward your hosting bandwidth usage.
+The original supplied MP3s are bundled unchanged in `public/music/`; `public/playlist.js` declares the available songs, titles, and durations. `public/music.js` controls playback. All five assets must be uploaded to GitHub and deployed with the code. The Node server streams them with byte-range/HEAD support for mobile browsers, rather than loading the entire playlist into memory. Media bytes count toward your hosting bandwidth usage.
 
 The Ready/Start tap prepares browser audio through a silent output. Some browsers, particularly after a refresh or app interruption, may still require **Tap for music**. On a real iPhone, check playback, volume, silent-mode behavior, and transitions on the device.
 
@@ -127,3 +127,7 @@ This code and its SVG artwork were created for your project. No Daily Holes sour
 ## Standard and One life modes
 
 In the lobby, the host chooses Standard (default) or One life. One life grants each player one protected mine hit: the mine is automatically flagged, stays pink, and cannot be unflagged. A second mine freezes their score or ends a solo attempt. A protected mine never scores as a safe tile. Mode changes reset readiness; mode stays selected for the next round and each player gets a fresh life. Daily puzzles keep Standard rules.
+
+## Shuffled game music
+
+The same five MP3s now play in a shuffled order each game, looping after all five have played. Players in the same room/round share the order; refreshing, muting, or reconnecting preserves that game’s order. New rounds and Daily attempts get a fresh shuffle.

@@ -64,7 +64,7 @@ function updateMusicControl() {
   button.dataset.musicState = music.playing ? 'playing' : !music.enabled ? 'muted' : 'silent';
   button.title = music.playing ? `Now playing: ${music.title}` : 'Five-track gameplay playlist';
   const label = document.querySelector('#now-playing');
-  const caption = music.playing ? `Now playing: ${music.index + 1}/5 · ${music.title}` : !music.enabled ? 'Music muted' : loading ? 'Loading the playlist…' : 'Five tracks, in order, on repeat.';
+  const caption = music.playing ? `Now playing: ${music.index + 1}/5 · ${music.title}` : !music.enabled ? 'Music muted' : loading ? 'Loading the playlist…' : 'Five tracks, shuffled each game, on repeat.';
   if (label && label.textContent !== caption) label.textContent = caption;
 }
 try { lastStoredSession = JSON.parse(storage.get('sweep-session')); } catch {}

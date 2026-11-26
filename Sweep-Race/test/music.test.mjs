@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { GameMusic } from '../public/music.js';
+import { GameMusic, shuffledTracks } from '../public/music.js';
 import { PLAYLIST } from '../public/playlist.js';
 const settle = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
 function fixture(preference = 'on') {
@@ -24,10 +24,10 @@ test('home, lobby and countdown never output audible music, including audio prim
  for(const phase of ['home','lobby','countdown']){f.update(phase);f.music.unlock();assert.equal(f.gain.gain.value,0);await settle();assert.equal(f.music.playing,false);assert.equal(f.gain.gain.value,0);}
 });
 
-test('gameplay starts the first track automatically after Ready primes the player',async()=>{
+test('gameplay starts the first shuffled track automatically after Ready primes the player',async()=>{
  const f=fixture();f.update('lobby',{key:'room:1',elapsedMs:0});f.music.unlock();await settle();
  f.update('playing',{key:'room:1',elapsedMs:0});await settle();
- assert.equal(f.music.playing,true);assert.match(f.audio.src,/1\.mp3$/);assert.equal(f.gain.gain.value,.22);
+ assert.equal(f.music.playing,true);assert.equal(f.audio.src, `/music/${encodeURIComponent(f.music.tracks[0].file)}`);assert.equal(f.gain.gain.value,.22);
 });
 
 test('ended events advance through all five tracks and loop back to the first',async()=>{
@@ -39,7 +39,7 @@ test('result, lobby, home, and countdown pause media and immediately silence the
  for(const phase of ['finished','lobby','home','countdown']){const f=fixture();f.update('playing');f.music.unlock();await settle();f.update(phase);assert.equal(f.music.playing,false);assert.equal(f.gain.gain.value,0);assert.ok(f.pauses()>0);}
 });
 
-test('each new game resets the playlist to track one',async()=>{
+test('each new game starts at the beginning of its shuffled order',async()=>{
  const f=fixture();f.update('playing',{key:'room:1',elapsedMs:0});f.music.unlock();await settle();f.audio.onended();await settle();assert.equal(f.music.index,1);
  f.update('countdown',{key:'room:2',elapsedMs:0});f.update('playing',{key:'room:2',elapsedMs:0});await settle();assert.equal(f.music.index,0);assert.equal(f.music.playing,true);
 });
@@ -70,4 +70,34 @@ test('unavailable audio cannot break gameplay',()=>{
 
 test('muting while a track is loading cancels its eventual playback',async()=>{
  const f=fixture();let resolve;f.audio.play=()=>new Promise(done=>{resolve=done;});f.update('playing');f.music.unlock();assert.equal(f.music.pending,true);f.music.toggle();assert.equal(f.music.enabled,false);resolve();await settle();assert.equal(f.music.playing,false);assert.equal(f.gain.gain.value,0);
+});
+
+test('game shuffles include every song once, preserve the source, and vary across rounds',()=>{
+ const before=PLAYLIST.map(t=>t.file),orders=new Set();
+ for(let round=1;round<=30;round++){
+  const key=`ABC234:${round}`,order=shuffledTracks(PLAYLIST,key);
+  assert.deepEqual(order.map(t=>t.file).sort(),[...before].sort());
+  assert.deepEqual(order,shuffledTracks(PLAYLIST,key),'all clients and refreshes share the same game order');
+  orders.add(order.map(t=>t.file).join('|'));
+ }
+ assert.ok(orders.size>15);assert.deepEqual(PLAYLIST.map(t=>t.file),before);
+});
+
+test('polls, mute and visibility do not reshuffle; a new round shuffles from the original tracks',async()=>{
+ const f=fixture();f.update('playing',{key:'room:1',elapsedMs:0});f.music.unlock();await settle();
+ const order=f.music.tracks.map(t=>t.file);
+ f.update('playing',{key:'room:1',elapsedMs:1000});f.music.toggle();f.update('playing',{visible:false,key:'room:1'});f.update('playing',{key:'room:1'});f.music.toggle();await settle();
+ assert.deepEqual(f.music.tracks.map(t=>t.file),order);
+ f.update('countdown',{key:'room:2',elapsedMs:0});
+ assert.deepEqual(f.music.tracks,shuffledTracks(f.music.originalTracks,'room:2'));
+ assert.notDeepEqual(f.music.tracks.map(t=>t.file),order);
+});
+
+test('resume alignment follows shuffled song durations and loops in the same order',async()=>{
+ const f=fixture();f.music.originalTracks=PLAYLIST;f.update('playing',{key:'duration:1',elapsedMs:0});f.music.unlock();await settle();
+ const order=f.music.tracks;const elapsed=(order[0].duration+order[1].duration+2)*1000;
+ f.update('playing',{visible:false});f.update('playing',{elapsedMs:elapsed});await settle();
+ assert.equal(f.music.index,2);assert.equal(f.music.title,order[2].title);assert.ok(Math.abs(f.audio.currentTime-2)<.001);
+ const observed=[];for(let i=0;i<5;i++){observed.push(f.audio.src);f.audio.onended();await settle();}
+ assert.equal(new Set(observed).size,5);assert.equal(f.music.index,2);assert.deepEqual(f.music.tracks,order);
 });
