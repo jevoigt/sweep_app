@@ -65,3 +65,5 @@
 
 /* Completed games distinguish losses from wins; draws retain the neutral warning tone. */
 .race-message.loss{background:#fff0f0;border-color:#e9b4b4;color:#963d3d}.race-message.loss strong{color:#8b3030}
+
+.mode-picker{border:0;padding:0;margin:0 19px 20px;min-width:0}.mode-picker .small-note{font-size:12px;line-height:1.5;color:#718567}.mode-picker button{min-width:0;font-size:14px}.mode-picker button:disabled{opacity:1}.tile.saved-mine{background:#f6b7d3!important;border-color:#ce6e9c!important;color:#833455!important;box-shadow:inset 0 2px 0 #ffe5f0;opacity:1}

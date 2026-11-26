@@ -92,3 +92,5 @@ Browser verification for this update: twelve players joined, the host started th
 Solo regression checks cover the host-only countdown, safe reveals and flagging without an early win, clearing the board, hitting a mine, conceding, replaying, and HTTP start authorization.
 
 Version 1.7: 74 automated tests passed. Browser verification confirmed the homepage “2–12 players / Or play solo” label, an enabled “Start race · 1 player” control after Ready, and the active solo board.
+
+Version 1.8: all 80 tests passed, including host mode permissions, readiness reset, twelve independent extra lives, private saved coordinates, protected flag locking, chording, full clear after using a life, next-round reset, Standard and Daily regression checks. Mobile browser preview verified the mode selector, a pink flagged first mine while play continues, and loss on a second mine.

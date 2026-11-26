@@ -51,7 +51,7 @@ export function generateBoard(settings, random = randomInt) {
 
 export function newPlayer(name, now = Date.now()) {
   return { id: randomBytes(12).toString('hex'), token: randomBytes(32).toString('hex'), name,
-    ready: false, revealed: new Set(), flags: new Set(), hit: null, forfeited: false,
+    ready: false, revealed: new Set(), flags: new Set(), savedMine: null, hit: null, forfeited: false,
     left: false, wins: 0, seenAt: now };
 }
 
@@ -71,14 +71,14 @@ function setBoard(room, difficulty, custom) {
   const config = boardSettings(difficulty, custom);
   Object.assign(room, config, { difficulty, safe: config.rows * config.columns - config.mines }, generateBoard(config));
   for (const p of room.players) {
-    p.ready = false; p.revealed.clear(); p.flags.clear(); p.hit = null; p.forfeited = false;
+    p.ready = false; p.revealed.clear(); p.flags.clear(); p.hit = null; p.savedMine = null; p.forfeited = false;
   }
 }
 
 export function createRoom(code, name, now = Date.now(), difficulty = 'easy', custom) {
   const host = newPlayer(name, now);
   const room = { code, players: [host], host: host.id, phase: 'lobby', startAt: null,
-    endAt: null, winner: null, leaders: [], reason: null, round: 1, revision: 0,
+    endAt: null, mode: 'standard', winner: null, leaders: [], reason: null, round: 1, revision: 0,
     createdAt: now, touchedAt: now };
   setBoard(room, difficulty, custom);
   return room;
@@ -147,6 +147,12 @@ export function leaveRoom(room, player, now = Date.now()) {
   room.revision++; room.touchedAt = now;
 }
 
+function hitMine(room, player, index) {
+  if (room.mode === 'one-life' && room.kind !== 'daily' && player.savedMine === null) {
+    player.savedMine = index; player.flags.add(index);
+  } else player.hit = index;
+}
+
 export function act(room, player, action, now = Date.now()) {
   advance(room, now);
   if (player.left) throw new GameError('You left this room.', 403);
@@ -160,6 +166,12 @@ export function act(room, player, action, now = Date.now()) {
     if (room.phase !== 'lobby') throw new GameError('The race has already started.', 409);
     if (!room.players.every(p => p.ready)) throw new GameError('Everyone must be ready.', 409);
     room.phase = 'countdown'; room.startAt = now + COUNTDOWN_MS;
+  } else if (action.type === 'mode') {
+    if (player.id !== room.host) throw new GameError('Only the host can choose the mode.', 403);
+    if (room.phase !== 'lobby') throw new GameError('Mode is locked during a race.', 409);
+    if (!['standard', 'one-life'].includes(action.mode)) throw new GameError('Choose Standard or One life.');
+    room.mode = action.mode;
+    for (const p of room.players) p.ready = false;
   } else if (action.type === 'settings') {
     if (player.id !== room.host) throw new GameError('Only the host can choose the board.', 403);
     if (room.phase !== 'lobby') throw new GameError('Board settings are locked during a race.', 409);
@@ -183,7 +195,7 @@ export function act(room, player, action, now = Date.now()) {
     const i = action.index;
     if (!Number.isInteger(i) || i < 0 || i >= room.board.length) throw new GameError('Invalid tile.');
     if (action.type === 'flag') {
-      if (!player.revealed.has(i)) {
+      if (!player.revealed.has(i) && i !== player.savedMine) {
         if (player.flags.has(i)) player.flags.delete(i);
         else if (player.flags.size < room.mines) player.flags.add(i);
       }
@@ -192,13 +204,13 @@ export function act(room, player, action, now = Date.now()) {
           neighbors(i, room.rows, room.columns).filter(n => player.flags.has(n)).length === room.board[i]) {
         for (const n of neighbors(i, room.rows, room.columns)) {
           if (player.flags.has(n) || player.revealed.has(n)) continue;
-          if (room.board[n] === -1) { player.hit = n; break; }
+          if (room.board[n] === -1) { hitMine(room, player, n); break; }
           flood(room.board, room.rows, room.columns, player.revealed, player.flags, n);
           if (player.revealed.size === room.safe) break;
         }
       }
     } else if (!player.flags.has(i) && !player.revealed.has(i)) {
-      if (room.board[i] === -1) player.hit = i;
+      if (room.board[i] === -1) hitMine(room, player, i);
       else flood(room.board, room.rows, room.columns, player.revealed, player.flags, i);
     }
     resolve(room, now);
@@ -213,9 +225,9 @@ export function view(room, player, now = Date.now()) {
     serverNow: now, startAt: room.startAt, endAt: room.endAt, host: room.host, maxPlayers: MAX_PLAYERS,
     winner: room.winner, leaders: room.leaders, reason: room.reason, difficulty: room.difficulty,
     rows: room.rows, columns: room.columns, mines: room.mines, safe: room.safe, you: player.id,
-    kind: room.kind || 'race', date: room.date || null,
+    kind: room.kind || 'race', date: room.date || null, mode: room.mode, savedMine: player.savedMine,
     players: room.players.map(p => ({ id: p.id, name: p.name, ready: p.ready, revealed: p.revealed.size,
-      hit: p.hit !== null, forfeited: p.forfeited, left: p.left, wins: p.wins, online: now - p.seenAt < 10000 })),
+      lifeUsed: p.savedMine !== null, hit: p.hit !== null, forfeited: p.forfeited, left: p.left, wins: p.wins, online: now - p.seenAt < 10000 })),
     board: room.board.map((value, i) => player.revealed.has(i) || i === player.hit || room.phase === 'finished' ? value : player.flags.has(i) ? -3 : -2),
     opened: [...player.revealed], flags: [...player.flags], hit: player.hit,
   };

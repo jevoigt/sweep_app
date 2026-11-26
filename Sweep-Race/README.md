@@ -123,3 +123,7 @@ Rooms are stored **in memory on one server**. Restarts, free-host sleep, crashes
 The server keeps hidden mines and other players’ tile positions private until the game ends. Player credentials are random bearer tokens stored in that player’s browser and sent in authorization headers, never invite links. All moves and scores are validated by the server; basic request/capacity limits are included. This does not prevent all automation or collusion.
 
 This code and its SVG artwork were created for your project. No Daily Holes source, branding, or assets are included. `UNLICENSED` keeps the project proprietary unless you add another license.
+
+## Standard and One life modes
+
+In the lobby, the host chooses Standard (default) or One life. One life grants each player one protected mine hit: the mine is automatically flagged, stays pink, and cannot be unflagged. A second mine freezes their score or ends a solo attempt. A protected mine never scores as a safe tile. Mode changes reset readiness; mode stays selected for the next round and each player gets a fresh life. Daily puzzles keep Standard rules.

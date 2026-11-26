@@ -1,6 +1,6 @@
 {
   "name": "sweep-race",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "private": true,
   "description": "Solo Minesweeper and 2\u201312 player races with custom boards up to 50 by 50.",
   "type": "module",

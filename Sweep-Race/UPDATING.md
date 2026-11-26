@@ -31,3 +31,7 @@ Upload the complete updated folder contents, including the existing five files i
 ## Solo play update
 
 Hosts can start with one ready player. A solo game ends on clearing all safe tiles, hitting a mine, or conceding. Multiplayer races still support twelve players. The homepage shows “2–12 players” and “Or play solo”; reload the page after deploying this upload.
+
+## Standard and One life modes
+
+In the lobby, the host chooses Standard (default) or One life. One life grants each player one protected mine hit: the mine is automatically flagged, stays pink, and cannot be unflagged. A second mine freezes their score or ends a solo attempt. A protected mine never scores as a safe tile. Mode changes reset readiness; mode stays selected for the next round and each player gets a fresh life. Daily puzzles keep Standard rules.

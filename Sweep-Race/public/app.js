@@ -93,7 +93,7 @@ async function api(path, data, token) {
 
 function adopt(next) {
   if (state && next.code === state.code && (next.round < state.round || next.revision < state.revision)) return;
-  const exploded = state && next.code === state.code && next.round === state.round && state.hit === null && next.hit !== null;
+  const exploded = state && next.code === state.code && next.round === state.round && ((state.hit === null && next.hit !== null) || (state.savedMine == null && next.savedMine != null));
   serverOffset = next.serverNow - Date.now();
   state = next; connected = true;
   if (next.kind === 'daily') journal.update(next, dailyAttempt);
@@ -235,6 +235,7 @@ function renderLobby() {
     <section class="invite-card"><div class="eyebrow">INVITE CODE</div><div class="invite-code">${esc(state.code)}</div>
       <div class="invite-buttons"><button id="copy-code" class="button light">Copy code</button><button id="share" class="button light">Share invite</button></div></section>
     <section class="lobby-settings"><fieldset class="difficulty-picker"><legend class="field-label">${host ? 'Your board · changing it resets everyone’s Ready' : 'The host’s board choice'}</legend>${difficultyButtons(editingCustom ? 'custom' : state.difficulty, !host || !connected)}</fieldset>${host && (editingCustom || state.difficulty === 'custom') ? customFields(true) : ''}<p class="small-note">${state.difficulty === 'custom' ? `${boardDescription()}. ` : ''}Rows × columns. All tiles start hidden. Your first click can hit a mine.</p></section>
+    <fieldset class="mode-picker"><legend class="field-label">Game mode · host chooses</legend><div class="button-row">${[['standard','Standard','First mine ends your attempt'],['one-life','One life','One protected mine hit']].map(([mode,title,note]) => `<button type="button" class="button ${state.mode === mode ? 'green' : 'light'}" data-mode="${mode}" aria-pressed="${state.mode === mode}" ${!host || !connected ? 'disabled' : ''}><span>${title}<small>${note}</small></span></button>`).join('')}</div><p class="small-note">One life: your first mine is flagged pink. The next mine ends your attempt. Changing mode resets everyone’s Ready.</p></fieldset>
     <div class="players">${state.players.map(p => `<div class="player-card"><div class="avatar ${p.id === me.id ? '' : 'rival'}">${esc(p.name[0].toUpperCase())}</div><div class="player-info"><strong>${esc(p.name)}${p.id === me.id ? ' (you)' : ''}</strong><small>${p.id === state.host ? 'Host · ' : ''}${p.online ? 'In the clubhouse' : 'Reconnecting…'}</small></div><span class="player-status ${p.ready ? 'ready' : ''}">${p.ready ? '✓ Ready' : 'Not ready'}</span></div>`).join('')}</div>
     <div class="section"><button id="ready" class="button ${me.ready ? 'light' : 'green'} full" ${!connected ? 'disabled' : ''}>${me.ready ? 'Ready ✓ · tap to cancel' : 'I’m ready'}</button>
       ${host ? `<button id="start-race" class="button blue full start-race" ${!allReady || !connected ? 'disabled' : ''}>Start race · ${state.players.length} ${state.players.length === 1 ? 'player' : 'players'}</button>` : ''}
@@ -273,8 +274,8 @@ function raceMessage() {
     const target = Math.max(...frozen.map(p => p.revealed)) + 1;
     return `<div class="race-message warning" role="status"><strong>${frozen.length} frozen ${frozen.length === 1 ? 'score' : 'scores'}.</strong>${active.length ? `Keep racing ${active.length} other active ${active.length === 1 ? 'player' : 'players'}. A full clear wins immediately.` : `You’re the last survivor. Reveal ${Math.max(0, target - me.revealed)} more safe tiles to beat every frozen score.`}</div>`;
   }
-  if (state.players.length === 1) return '<div class="race-message"><strong>Your own little field.</strong>Clear every safe tile to win. Hitting a mine ends your attempt.</div>';
-  return '<div class="race-message"><strong>Every safe tile counts.</strong>First to clear wins. Hitting a mine freezes your score while the remaining players keep going.</div>';
+  if (state.players.length === 1) return `<div class="race-message"><strong>Your own little field.</strong>Clear every safe tile to win. ${state.mode === 'one-life' ? state.savedMine == null ? 'Your first mine uses your extra life and turns pink.' : 'Extra life used. The next mine ends your attempt.' : 'Hitting a mine ends your attempt.'}</div>`;
+  return `<div class="race-message"><strong>Every safe tile counts.</strong>First to clear wins. ${state.mode === 'one-life' ? state.savedMine == null ? 'Your first mine uses your extra life and turns pink; your next mine freezes your score.' : 'Extra life used. Your next mine freezes your score while the others keep going.' : 'Hitting a mine freezes your score while the remaining players keep going.'}</div>`;
 }
 
 function renderBoard() {
@@ -287,7 +288,7 @@ function renderBoard() {
     app.innerHTML = `<div class="status-strip"><span class="room-id">${daily ? `DAILY ${state.date} · TRY ${dailyAttempt}` : `${esc(state.code)} · ROUND ${state.round}`}</span><span class="timer" id="clock">00:00</span></div>
       <section class="scoreboard" id="scores" aria-label="Live scores. Swipe to see all players."></section>
       ${daily ? '<p class="daily-run-note">Shared daily board · resets at midnight EST (UTC−5)</p>' : `<details class="standings"><summary>All ${state.players.length} players · standings</summary><div id="standings-list"></div></details>`}
-      <div class="board-heading"><div class="board-info">${esc(boardDescription())}</div><div class="sound-controls"><button id="music-toggle" class="music-toggle" type="button">♫ Music on</button></div></div>
+      <div class="board-heading"><div class="board-info">${esc(boardDescription())}${state.mode === 'one-life' ? '<br>One life · <span id="life-status"></span>' : ''}</div><div class="sound-controls"><button id="music-toggle" class="music-toggle" type="button">♫ Music on</button></div></div>
       <p class="now-playing" id="now-playing" role="status" aria-live="polite"></p>
       <div class="touch-instructions"><p>Tap to reveal.<br>Hold to flag or unflag.</p><span class="mines-left" id="flags-left"></span></div>
       <div class="zoom-tools" role="group" aria-label="Board zoom"><button id="zoom-out" class="zoom-button" aria-label="Zoom out">−</button><output id="zoom-label">Fit</output><button id="zoom-in" class="zoom-button" aria-label="Zoom in">+</button><button id="zoom-fit" class="zoom-button text-zoom">Fit</button></div>
@@ -308,15 +309,16 @@ function renderBoard() {
   document.querySelectorAll('[data-cell]').forEach((tile, i) => {
       const value = state.board[i];
       const isOpen = opened.has(i), flagged = flags.has(i);
-      const classes = ['tile', isOpen ? `open n${value}` : '', value === -1 ? 'mine' : '', i === state.hit ? 'exploded' : '', flagged && !isOpen && value !== -1 ? 'flag' : ''].filter(Boolean).join(' ');
+      const saved = i === state.savedMine;
+      const classes = ['tile', saved ? 'saved-mine' : '', isOpen ? `open n${value}` : '', value === -1 ? 'mine' : '', i === state.hit ? 'exploded' : '', flagged && !isOpen && value !== -1 ? 'flag' : ''].filter(Boolean).join(' ');
       const row = Math.floor(i / state.columns) + 1, col = i % state.columns + 1;
-      const label = value === -1 ? 'mine' : isOpen || finished ? value ? `${value} adjacent mines` : 'empty' : flagged ? 'flagged' : 'covered';
-      const text = value === -1 ? '✹' : flagged && !isOpen ? '⚑' : isOpen || finished ? value > 0 ? value : '' : '';
+      const label = saved ? 'flagged mine, extra life used' : value === -1 ? 'mine' : isOpen || finished ? value ? `${value} adjacent mines` : 'empty' : flagged ? 'flagged' : 'covered';
+      const text = saved ? '⚑' : value === -1 ? '✹' : flagged && !isOpen ? '⚑' : isOpen || finished ? value > 0 ? value : '' : '';
       const holding = tile.classList.contains('holding');
-      tile.className = classes; tile.classList.toggle('holding', holding); tile.textContent = text; tile.disabled = !canPlay;
+      tile.className = classes; tile.classList.toggle('holding', holding); tile.textContent = text; tile.disabled = !canPlay || saved;
       tile.setAttribute('aria-label', `Row ${row}, column ${col}, ${label}`);
   });
-  document.querySelector('#flags-left').innerHTML = `<strong>${state.mines - state.flags.length}</strong>flags left`;
+  document.querySelector('#flags-left').innerHTML = `<strong>${Math.max(0, state.mines - state.flags.length)}</strong>flags left`;
   document.querySelector('#countdown-mask').hidden = state.phase !== 'countdown';
   document.querySelector('#race-feedback').innerHTML = raceMessage();
   document.querySelector('#result-actions').innerHTML = finished ? daily ? '<button id="copy-daily" class="button green full">Copy daily results</button><button id="retry-daily" class="button light full">Retry daily · attempt counted</button>' : `${state.host === me.id ? '<button id="next-lobby" class="button green full">Back to lobby · fresh board</button>' : '<p class="lobby-note">Waiting for the host to open the next lobby.</p>'}<p class="micro-note">MATCH WINS · ${state.players.map(p => `${esc(p.name)} ${p.wins}`).join(' / ')}</p>` : '';
@@ -325,6 +327,8 @@ function renderBoard() {
   document.querySelector('#leave').hidden = !finished && !me.forfeited && !me.hit;
   const connection = document.querySelector('#connection');
   connection.textContent = connected ? 'Connected' : 'Reconnecting…'; connection.classList.toggle('offline', !connected);
+  const lifeStatus = document.querySelector('#life-status');
+  if (lifeStatus) lifeStatus.textContent = state.savedMine == null ? 'extra life available' : 'extra life used';
   applyZoom();
   updateMusicControl();
 }
@@ -404,6 +408,8 @@ function changeZoom(direction) {
   const y = (viewport.scrollTop + viewport.clientHeight / 2) / viewport.scrollHeight;
   const levels = ['fit', 'normal', 'large', 'xlarge'];
   zoom = direction === 'fit' ? 'fit' : levels[Math.max(0, Math.min(3, levels.indexOf(zoom) + direction))];
+  const lifeStatus = document.querySelector('#life-status');
+  if (lifeStatus) lifeStatus.textContent = state.savedMine == null ? 'extra life available' : 'extra life used';
   applyZoom();
   viewport.scrollLeft = x * viewport.scrollWidth - viewport.clientWidth / 2;
   viewport.scrollTop = y * viewport.scrollHeight - viewport.clientHeight / 2;
@@ -490,6 +496,10 @@ app.addEventListener('input', event => {
 app.addEventListener('click', async event => {
   const button = event.target.closest('button');
   if (!button || button.disabled) return;
+  if (button.dataset.mode) {
+    if (button.dataset.mode !== state.mode) move('mode', undefined, {mode: button.dataset.mode});
+    return;
+  }
   if (button.dataset.difficulty) {
     const difficulty = button.dataset.difficulty;
     if (screen === 'home') {
