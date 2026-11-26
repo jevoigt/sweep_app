@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { randomInt } from 'node:crypto';
-import { createRoom, joinRoom, act, view, GameError } from './game.mjs';
+import { createRoom, joinRoom, leaveRoom, act, view, GameError } from './game.mjs';
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const IDLE_MS = 60 * 60 * 1000;
@@ -11,6 +11,7 @@ const ROOM_LIMIT = 2000;
 const ASSETS = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
+  '/music.js': ['music.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
   '/favicon.svg': ['favicon.svg', 'image/svg+xml'],
   '/field.svg': ['field.svg', 'image/svg+xml'],
@@ -75,11 +76,11 @@ export function createGameServer() {
           if (rooms.size >= ROOM_LIMIT) throw new GameError('The server is full. Try again later.', 503);
           let code;
           do { code = Array.from({ length: 6 }, () => ALPHABET[randomInt(ALPHABET.length)]).join(''); } while (rooms.has(code));
-          const room = createRoom(code, cleanName(input.name));
+          const room = createRoom(code, cleanName(input.name), Date.now(), input.difficulty ?? 'easy');
           rooms.set(code, room);
           return json(res, 201, { token: room.players[0].token, state: view(room, room.players[0]) });
         }
-        const match = /^\/api\/rooms\/([A-Z2-9]{6})(?:\/(join|actions))?$/.exec(url.pathname);
+        const match = /^\/api\/rooms\/([A-Z2-9]{6})(?:\/(join|actions|leave))?$/.exec(url.pathname);
         if (!match) throw new GameError('Room not found. Check the invite code.', 404);
         const [, code, operation] = match;
         const room = rooms.get(code);
@@ -92,8 +93,13 @@ export function createGameServer() {
         }
         const token = req.headers.authorization?.replace(/^Bearer /, '');
         const player = room.players.find(p => p.token === token);
-        if (!player) throw new GameError('Your player session is missing. Join with the invite code.', 401);
+        if (!player || player.left) throw new GameError('Your player session is missing. Join with the invite code.', 401);
         limited(`player:${player.id}`, 900);
+        if (req.method === 'POST' && operation === 'leave') {
+          leaveRoom(room, player);
+          if (!room.players.some(p => !p.left)) rooms.delete(code);
+          return json(res, 200, { left: true });
+        }
         if (req.method === 'GET' && !operation) {
           player.seenAt = Date.now(); room.touchedAt = Date.now();
           return json(res, 200, view(room, player));

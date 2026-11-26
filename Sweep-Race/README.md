@@ -1,79 +1,89 @@
 # Sweep Race
 
-A two-player Minesweeper website with invite codes, identical boards, live progress, and rematches. Its compact layout, rounded cards, raised green/blue buttons, and original landscape artwork take inspiration from Daily Holes.
+Live Minesweeper races for **2–8 players**, with private invite codes, identical boards, live scores, and three board sizes. The mobile interface keeps its rounded cards and soft green/blue styling, with an original smiling-mine homepage illustration.
 
-**Start here:** [DEPLOY.md](DEPLOY.md) explains how to put it on GitHub and get a public, free Render URL. The website is not deployed just because these files are on your computer or on GitHub.
+**Already hosting this?** See [UPDATING.md](UPDATING.md). Upload these updated files into the same existing GitHub folder, then redeploy your existing Render service. Your public URL stays the same.
 
-## Run on your computer
+## Run locally
 
-1. Install the current Node.js LTS from https://nodejs.org if you do not have Node.js 22 or later.
-2. Open Terminal in this folder.
-3. Run:
+Install Node.js 22, open Terminal in this folder, and run:
 
-   ```sh
-   npm start
-   ```
-
-4. Open http://localhost:3000 in your browser.
-
-There are **no third-party runtime dependencies**, API keys, databases, or build tools to configure. `npm install` is not required to run locally. On a Mac, you can also double-click `Start-Game.command` after installing Node.js. macOS may ask before allowing a downloaded command file to run; Terminal is an alternative.
-
-To test both players on one computer, use two browser profiles, a normal and private window, or `localhost:3000` for player one and `127.0.0.1:3000` for player two. Two ordinary tabs on the exact same origin share the saved player identity and resume the same player.
-
-## The rules
-
-- Exactly two players per room. Create a room and share its six-character invite code or link.
-- Both players tap Ready. A shared three-second countdown starts the race.
-- Each player has an independent copy of the **same 9 × 9 board with 12 mines**. Both start with the identical safe area already open.
-- Tap to reveal. Use the on-screen Flag button to mark or unmark a tile. Desktop players can also right-click, or focus a tile and press F.
-- Numbers count mines in all eight neighboring directions. Tapping a revealed number opens its remaining neighbors if the matching number of flags are placed. Wrong flags can hit a mine.
-- **The first player to reveal every safe tile wins immediately.**
-- **A mine freezes that player’s safe-tile score.** The surviving player continues until they reveal more safe tiles or also hit a mine. If the survivor is already ahead, they win immediately.
-- If both hit mines, the higher safe-tile count wins. An equal count is a draw.
-- Flags do not score. Automatically opened safe tiles do score, equally for both players.
-- A player can also concede. There is no time limit on an active race.
-- A rematch needs both players’ consent, uses a fresh shared board, and retains the match-win count for that room.
-- Random boards are not guaranteed to be solvable without guessing.
-
-Moves are processed in server arrival order. This includes the rare case of two nearly simultaneous winning moves.
-
-## iPhone / iOS
-
-The interface uses a responsive board, a viewport that allows zoom, safe-area spacing, 16 px text inputs to avoid Safari’s automatic focus zoom, and an explicit Reveal/Flag toggle. It does not depend on hovering or right-clicking. Share Invite uses the native iOS share sheet on HTTPS, with a copy fallback. Hidden tabs pause background polling; returning to Safari fetches the actual server state. Refreshing reconnects using the saved player token.
-
-On an iPhone after deployment: open the HTTPS URL in Safari. You may optionally use Safari’s Share → Add to Home Screen. No App Store submission is needed. This is an online website, not an offline app.
-
-Phone-sized Chromium layouts were checked during development. Real iOS Safari/WebKit and the native share sheet still need the device checks in [TESTING.md](TESTING.md).
-
-## Project files
-
-```text
-server.mjs                 HTTP server, rooms, authentication, static files
-game.mjs                   Authoritative Minesweeper and win-condition logic
-public/index.html          App shell and rules
-public/app.js              Browser UI, actions, reconnects, polling
-public/style.css           Responsive styling
-public/field.svg            Original Minesweeper landscape artwork
-public/favicon.svg         App icon
-test/                      Game-rule and HTTP integration tests
-.github/workflows/test.yml  GitHub Actions tests
-render.yaml                Free Render web-service configuration
-DEPLOY.md                  GitHub → Render instructions
-TESTING.md                 Verification and iPhone test checklist
+```sh
+npm start
 ```
 
-Run tests with `npm test`. For development with automatic server restarts, use `npm run dev` and refresh your browser after changes. `PORT` sets the HTTP port (default 3000); Render provides it automatically. The server listens on `0.0.0.0` for hosting.
+Open http://localhost:3000. There are no external dependencies, build tools, API keys, or databases. On a Mac, `Start-Game.command` also starts the server. `npm run dev` watches server changes; refresh the browser after edits. `PORT` changes the default port of 3000; Render provides it automatically.
 
-## Hosting and storage limits
+For two local browser players, use separate profiles/private windows, or `localhost:3000` and `127.0.0.1:3000`. Ordinary tabs on the same origin share the saved player identity. The automated integration test creates eight independent clients.
 
-This initial version is intended for casual play on a **single server instance**. Rooms and scores live in memory; there is no persistent database. Server restarts, deployments, crashes, and free-host sleep remove every room. Idle rooms expire after one hour. It does not include permanent accounts, daily leaderboards, leagues, or historical statistics.
+## Choose a board
 
-Player credentials are random bearer tokens stored in the player’s browser and sent only in authorization headers. Invite links contain only the room code. The server keeps hidden mines and the opponent’s tile positions private until the race ends; it validates all reveals, flags, scores, and results. Basic request and room limits are included. This does not prevent automation, multiple collaborating accounts, or all forms of cheating; it is not a cash-competition platform.
+| Difficulty | Rows | Columns | Mines | Safe tiles |
+| --- | --- | --- | --- | --- |
+| Easy | 9 | 9 | 10 | 71 |
+| Medium | 16 | 16 | 40 | 216 |
+| Hard | 30 | 16 | 99 | 381 |
 
-Refreshes and app switching reconnect on the same browser while the room and its saved credential still exist. Private-browsing cleanup or clearing site data loses that identity. Leaving a lobby returns home but keeps your seat available to resume; start a new room if you want a different rival. Races are not paused when a player switches apps or loses connectivity.
+The host chooses before creating the room and may change the choice in the lobby. Changing it resets everyone’s Ready status. Board dimensions are rows first: Hard is tall, **30 rows and 16 columns**.
 
-To scale across server instances or preserve games through restarts, move rooms to a shared durable store before increasing the instance count.
+Every round generates a fresh random board. Mines are sampled uniformly without replacement from **every tile**, with exactly the selected mine count. Every player gets the same layout, and **all tiles remain hidden when the countdown ends**. There is no protected region, starting reveal, or first-click safety: the first click can hit a mine. Safe zero tiles still reveal their connected area when a player clicks them during play. Boards are not guaranteed to be solvable without guessing.
 
-## Ownership
+## Play
 
-This source was created for your project and has no third-party runtime code. The original SVGs are included. No Daily Holes code, logos, or assets are bundled. `UNLICENSED` keeps the repository private/proprietary by default; add a license if you decide to publish it as open source.
+1. Enter your name, choose a board, and create a room.
+2. Share its six-character code or invite link with up to seven friends. A room holds at most eight players; at least two are required to start.
+3. Everyone taps **I’m ready**. When the invited group has arrived, the host taps **Start race**. Readiness alone never starts the race early.
+4. A shared three-second countdown starts the race with every tile hidden on everyone’s independent copy of the same board.
+5. Reveal safe tiles. Use Flag mode to mark/unmark suspected mines; flags do not score. On desktop, right-click or press F on a focused tile. Arrow keys move through the board using its actual dimensions.
+6. A numbered tile counts adjacent mines in all eight directions. Tap a revealed number with the matching number of adjacent flags to open its other neighbors. Incorrect flags can hit a mine.
+
+## Winning with any number of players
+
+- **First to clear every safe tile wins immediately**, ending the game for everyone.
+- Hitting a mine freezes your safe-tile count; everyone else who is still active can continue.
+- A survivor passing an eliminated player’s score does **not** end the race while multiple players are still active.
+- When only one survivor remains, they win as soon as they strictly exceed every frozen score. If they were already ahead when the other players hit mines, they win immediately.
+- If everyone hits a mine, the highest safe-tile count wins. Equal highest scores draw, even if lower-scoring players are also in the race.
+- Conceding disqualifies your score. Leaving after hitting a mine preserves that frozen score. Leaving while still active concedes.
+- There is no timer-based win condition. The elapsed timer keeps running when someone switches apps.
+- Server arrival order decides nearly simultaneous moves. The server processes each move and its result before the next action.
+
+After a result, the host can reopen the lobby with a fresh board. Players remain in the room and their match-win counts are kept; everyone marks Ready again. The host can change difficulty or invite replacement players before starting. Leaving a lobby frees your seat; if the host leaves, another remaining player becomes host.
+
+## iPhone controls and large boards
+
+- The **+ / −** buttons change tile sizes; **Fit** fits all columns into the visible width.
+- Medium and Hard default to readable 36 px tiles, with horizontal and vertical scrolling inside the board. Larger options use 44 px and 52 px tiles. Fit may make cells small; zoom in again for accurate taps.
+- Use the visible **Reveal / Flag** switch; no hover, long-press, or right-click is needed.
+- The board stays mounted while other players’ scores change, preserving scroll position and touch interactions.
+- Browser pinch zoom remains enabled. Form inputs use 16 px text, and the app includes safe-area spacing for iOS.
+- Swipe the live score cards or expand **All players · standings** to see every player.
+- Share Invite uses the native share sheet on supported HTTPS browsers, with a copy fallback.
+- App switching pauses polling; coming back fetches the server’s authoritative state. Refreshing reconnects using a saved browser token while the room still exists.
+
+Desktop Chromium was checked at mobile widths during development. Actual iOS Safari/WebKit, hardware touch, pinch behavior, and the native share sheet still need real-device testing; see [TESTING.md](TESTING.md).
+
+## Music
+
+An original synthesized elevator-style loop plays quietly during active gameplay only. The homepage, lobby, countdown, and result screens are silent. The in-game Music button mutes/unmutes it, and that preference is remembered on the device. Switching away from the tab or losing connection pauses music until the game reconnects.
+
+The Ready/Start tap prepares Web Audio without playing anything in the lobby. Some browsers, particularly after reloading directly into a game or returning from another app, may still require a tap; the button then says **Tap for music**. No external music service, audio download, or copyrighted track is used. The composition lives in `public/music.js`.
+
+## Files and checks
+
+- `game.mjs`: server-authoritative generation, dimensions, room state, and win conditions.
+- `server.mjs`: Node HTTP server, room API, authentication, and static files.
+- `public/`: browser UI, styling, rules, and original SVG artwork.
+- `test/`: meaningful board-generation, scoring, capacity, authentication, and HTTP lifecycle tests. Run `npm test`.
+- `render.yaml`: a free single-instance Render Web Service configuration; build command `npm test`, start command `npm start`.
+- `.github/workflows/test.yml`: optional GitHub test workflow, recognized when `.github` is at the repository root.
+- [DEPLOY.md](DEPLOY.md): initial GitHub → Render setup.
+- [UPDATING.md](UPDATING.md): update your existing deployed game.
+
+## Hosting limits
+
+Rooms are stored **in memory on one server**. Restarts, free-host sleep, crashes, or deployments remove active rooms. Idle rooms expire after an hour without activity. This version has no persistent accounts, history, leagues, or daily leaderboard. Do not increase the server instance count without introducing a shared durable store.
+
+The server keeps hidden mines and other players’ tile positions private until the game ends. Player credentials are random bearer tokens stored in that player’s browser and sent in authorization headers, never invite links. All moves and scores are validated by the server; basic request/capacity limits are included. This does not prevent all automation or collusion.
+
+This code and its SVG artwork were created for your project. No Daily Holes source, branding, or assets are included. `UNLICENSED` keeps the project proprietary unless you add another license.

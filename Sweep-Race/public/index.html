@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#f1f5f0">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="description" content="A little friendly rivalry. Invite a friend to a live Minesweeper race on the same board.">
+  <meta name="description" content="Race up to seven friends at Minesweeper. Three board sizes, the same randomly mined board, and live scores.">
   <title>Sweep Race — a little friendly rivalry</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
-  <script src="/app.js" defer></script>
+  <script src="/app.js" type="module"></script>
 </head>
 <body>
   <div class="shell">
@@ -30,11 +30,13 @@
     <div class="dialog-top"><span class="eyebrow">THE FIELD GUIDE</span><button class="icon-button" id="close-rules" aria-label="Close rules">×</button></div>
     <h2>A familiar game.<br>A friendly rival.</h2>
     <ol class="rules-list">
-      <li><strong>Invite your person.</strong> Share your six-character room code or invite link. Both players tap Ready for the same three-second countdown.</li>
-      <li><strong>Same field. Separate boards.</strong> Your center opening is safe and identical. Tap a covered tile to reveal it. Numbers count neighboring mines, including diagonals.</li>
+      <li><strong>Invite your people.</strong> Share your six-character room code or invite link. Rooms hold 2–8 players. Everyone taps Ready, then the host starts the shared three-second countdown.</li>
+      <li><strong>Choose your field.</strong> Easy: 9 rows × 9 columns, 10 mines. Medium: 16 × 16, 40 mines. Hard: 30 rows × 16 columns, 99 mines. The host can change the choice in the lobby; everyone must ready up again.</li>
+      <li><strong>Same field. Separate boards.</strong> All tiles start hidden, and mines are randomly scattered across the entire board. Everyone gets the same layout. Your first click can hit a mine. Numbers count neighboring mines, including diagonals.</li>
       <li><strong>Mark what you suspect.</strong> Switch to Flag mode, then tap tiles to mark or unmark them. On desktop, right-click or press F on a focused tile.</li>
       <li><strong>Clear it to win.</strong> The first player to reveal all safe tiles ends the race immediately. Flags don’t add points.</li>
-      <li><strong>A mine freezes your score.</strong> Your opponent keeps playing until they beat your safe-tile count or hit a mine. If they’re already ahead, they win immediately. If both hit mines, most safe tiles wins; equal scores draw.</li>
+      <li><strong>A mine freezes your score.</strong> Remaining players keep racing. The last survivor wins once they pass every frozen score. If everyone hits a mine, the highest safe-tile count wins; tied top scores draw. A player who concedes cannot win.</li>
+      <li><strong>Big board, small screen.</strong> Use + and − to resize tiles or Fit to see the full width. Drag inside the board to scroll. Your browser’s pinch zoom still works.</li>
     </ol>
     <p class="small-note">Tap a revealed number to open its remaining neighbors when it has the right number of adjacent flags. Wrong flags can hit a mine. Random boards may require a guess.</p>
     <button id="got-it" class="button green full">Got it. Let’s play.</button>

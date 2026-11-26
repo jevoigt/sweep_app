@@ -3,7 +3,7 @@ services:
     name: sweep-race
     runtime: node
     plan: free
-    buildCommand: npm ci --ignore-scripts && npm test
+    buildCommand: npm test
     startCommand: npm start
     healthCheckPath: /health
     envVars:

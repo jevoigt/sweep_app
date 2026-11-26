@@ -47,7 +47,7 @@ Git may ask you to configure your name/email or authenticate to GitHub. Use your
    | Branch | `main` |
    | Root Directory | Leave blank if `package.json` is at the repository root |
    | Language / Runtime | Node |
-   | Build Command | `npm ci --ignore-scripts && npm test` |
+   | Build Command | `npm test` |
    | Start Command | `npm start` |
    | Instance Type | **Free** |
 
@@ -63,8 +63,8 @@ After you deploy, new pushes to the connected branch can automatically redeploy 
 
 1. Open the deployed URL on your iPhone. Enter your name and tap **Create race**.
 2. Tap **Share invite** and send the link to a friend on a different device.
-3. They enter their name and tap **Join**.
-4. Both tap **I’m ready**. You should get the same board and opening.
+3. They enter their name and tap **Join**. Invite up to seven friends in total.
+4. Everyone taps **I’m ready**, then the host taps **Start race**. You should get the same board with every tile hidden. Your first click can hit a mine.
 5. Play a round and a rematch. Try app-switching and returning to Safari.
 
 An invite must use the deployed URL. A `localhost` link only refers to the device opening it and will not work for friends on the internet.

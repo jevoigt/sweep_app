@@ -1,4 +1,5 @@
 /* Plain browser JavaScript. No build step, framework, or third-party scripts. */
+import { ElevatorMusic } from './music.js';
 const app = document.querySelector('#app');
 const toastNode = document.querySelector('#toast');
 const rules = document.querySelector('#rules');
@@ -15,6 +16,15 @@ let toastTimer;
 let pending = Promise.resolve();
 let lastStoredSession = null;
 let busy = false;
+let selectedDifficulty = storageChoice();
+let zoom = 'fit';
+let boardLayout = '';
+const boardOptions = [
+  { id: 'easy', name: 'Easy', rows: 9, columns: 9, mines: 10 },
+  { id: 'medium', name: 'Medium', rows: 16, columns: 16, mines: 40 },
+  { id: 'hard', name: 'Hard', rows: 30, columns: 16, mines: 99 },
+];
+function storageChoice() { try { return ['easy', 'medium', 'hard'].includes(localStorage.getItem('sweep-difficulty')) ? localStorage.getItem('sweep-difficulty') : 'easy'; } catch { return 'easy'; } }
 let invite = new URLSearchParams(location.search).get('room')?.toUpperCase().replace(/[^A-Z2-9]/g, '').slice(0, 6) || '';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -23,6 +33,17 @@ const storage = {
   set(key, value) { try { localStorage.setItem(key, value); } catch { /* Private browsing can restrict storage. */ } },
   remove(key) { try { localStorage.removeItem(key); } catch {} },
 };
+const music = new ElevatorMusic({ storage, onChange: updateMusicControl });
+function updateMusicControl() {
+  const button = document.querySelector('#music-toggle');
+  if (!button) return;
+  const blocked = music.enabled && music.phase === 'playing' && !music.playing;
+  button.textContent = music.unavailable ? 'Music unavailable' : !music.enabled ? '♫ Music off' : blocked ? '♫ Tap for music' : '♫ Music on';
+  button.disabled = music.unavailable;
+  button.setAttribute('aria-pressed', music.enabled ? 'true' : 'false');
+  button.setAttribute('aria-label', blocked ? 'Tap to start music' : music.enabled ? 'Mute music' : 'Turn music on');
+  button.dataset.musicState = music.playing ? 'playing' : !music.enabled ? 'muted' : 'silent';
+}
 try { lastStoredSession = JSON.parse(storage.get('sweep-session')); } catch {}
 if (!lastStoredSession?.code || !lastStoredSession?.token) lastStoredSession = null;
 
@@ -85,14 +106,14 @@ async function poll(epoch) {
   if (epoch === generation) pollTimer = setTimeout(() => poll(epoch), connected ? 750 : 2000);
 }
 
-function move(type, index) {
+function move(type, index, extra = {}) {
   if (!session || !state) return;
   if (!connected) return toast('Reconnecting. Your board will resume when connected.');
   const active = { ...session }, round = state.round, epoch = generation;
   pending = pending.catch(() => {}).then(async () => {
     if (epoch !== generation || state?.round !== round) return;
     try {
-      const next = await api(`/${active.code}/actions`, { type, index, round }, active.token);
+      const next = await api(`/${active.code}/actions`, { type, index, round, ...extra }, active.token);
       if (epoch === generation) adopt(next);
     } catch (error) {
       if (epoch !== generation) return;
@@ -104,18 +125,21 @@ function move(type, index) {
 
 function renderHome() {
   screen = 'home';
+  music.update({ phase: 'home', visible: !document.hidden, connected: false });
+  boardLayout = '';
   app.innerHTML = `
     <section class="hero" aria-labelledby="home-title">
-      <img src="/field.svg" alt="A green Minesweeper field beneath a flag in a mountain landscape">
-      <div class="hero-copy"><div class="eyebrow">THE TWO-PLAYER MINESWEEPER CLUB</div>
-        <h1 id="home-title">One board.<br>Two rivals.</h1><p>A little nerve. A little logic.<br>A race against your favorite person.</p></div>
-      <div class="hero-chip"><span aria-hidden="true">⚑</span><div><small>THE CHALLENGE</small><strong>81 tiles. 12 mines. Just you two.</strong></div></div>
+      <img src="/field.svg" alt="A cheerful Minesweeper mine with a smiling face">
+      <div class="hero-copy"><div class="eyebrow">THE MULTIPLAYER MINESWEEPER CLUB</div>
+        <h1 id="home-title">Small mine.<br>Big rivalries.</h1><p>Bring your nerve.<br>And up to seven friends.</p></div>
+      <div class="hero-chip"><span aria-hidden="true">☺</span><div><small>THE CHALLENGE</small><strong>One board. Up to eight players.</strong></div></div>
     </section>
     <section class="section">
       <div class="name-row"><label class="field-label" for="player-name">What should we call you?</label>
         <input class="name-input" id="player-name" placeholder="Your name" maxlength="20" autocomplete="nickname" value="${esc(storage.get('sweep-name') || '')}"></div>
+      <fieldset class="difficulty-picker"><legend class="field-label">Choose your board</legend>${difficultyButtons(selectedDifficulty)}</fieldset>
       <div class="button-row">
-        <button id="create" class="button green"><span class="button-icon" aria-hidden="true">⚑</span><span class="button-copy">Create race<small>Invite a friend</small></span></button>
+        <button id="create" class="button green"><span class="button-icon" aria-hidden="true">⚑</span><span class="button-copy">Create race<small>Invite your friends</small></span></button>
         <button id="show-join" class="button blue"><span class="button-icon" aria-hidden="true">♧</span><span class="button-copy">Join race<small>Enter a room code</small></span></button>
       </div>
       <p class="micro-note">FREE TO PLAY · NO ACCOUNT NEEDED</p>
@@ -125,7 +149,7 @@ function renderHome() {
       </div>
       ${lastStoredSession ? `<div class="resume-box">Have an unfinished rivalry?<button id="resume">Return to room ${esc(lastStoredSession.code)}</button></div>` : ''}
       <div class="mini-row"><div class="mini-card"><span class="mini-icon" aria-hidden="true">▦</span><div><strong>Identical boards</strong><small>A fair start, every time</small></div></div>
-        <div class="mini-card"><span class="mini-icon" aria-hidden="true">◷</span><div><strong>Live rivalry</strong><small>Watch their progress</small></div></div></div>
+        <div class="mini-card"><span class="mini-icon" aria-hidden="true">◷</span><div><strong>2–8 players</strong><small>Room for your rivals</small></div></div></div>
     </section>`;
 }
 
@@ -135,68 +159,129 @@ function goHome() {
 }
 
 function you() { return state.players.find(p => p.id === state.you); }
-function opponent() { return state.players.find(p => p.id !== state.you); }
+function rivals() { return state.players.filter(p => p.id !== state.you); }
+function difficultyButtons(selected, disabled = false) {
+  return boardOptions.map(b => `<button type="button" class="difficulty-option ${selected === b.id ? 'chosen' : ''}" data-difficulty="${b.id}" aria-pressed="${selected === b.id}" ${disabled ? 'disabled' : ''}><strong>${b.name}</strong><span>${b.rows} × ${b.columns}</span><small>${b.mines} mines</small></button>`).join('');
+}
+function boardDescription() { return `${state.difficulty[0].toUpperCase() + state.difficulty.slice(1)} · ${state.rows} rows × ${state.columns} columns · ${state.mines} mines`; }
 
 function renderRace() {
   if (!state || screen !== 'race') return;
+  music.update({ phase: state.phase, visible: !document.hidden, connected });
   const key = [state.code, state.revision, mode, connected, ...state.players.map(p => p.online)].join(':');
   if (key === renderKey) return;
   renderKey = key;
-  const focusIndex = document.activeElement?.dataset?.cell;
-  if (state.phase === 'lobby') renderLobby(); else renderBoard();
-  if (focusIndex !== undefined) app.querySelector(`[data-cell="${focusIndex}"]`)?.focus({ preventScroll: true });
+  if (state.phase === 'lobby') { boardLayout = ''; renderLobby(); } else renderBoard();
   updateClock();
 }
 
 function renderLobby() {
-  const me = you(), rival = opponent();
-  app.innerHTML = `<section class="room-heading"><div class="eyebrow">YOUR PRIVATE FIELD</div><h1>Bring a little competition.</h1><p>Send your friend the code.<br>Same board. Same start. Best sweeper wins.</p></section>
+  const me = you(), host = me.id === state.host;
+  const allReady = state.players.length >= 2 && state.players.every(p => p.ready);
+  app.innerHTML = `<section class="room-heading"><div class="eyebrow">YOUR PRIVATE FIELD · ${state.players.length} / ${state.maxPlayers} PLAYERS</div><h1>Bring a little competition.</h1><p>Invite up to seven friends.<br>The host starts when everyone is ready.</p></section>
     <section class="invite-card"><div class="eyebrow">INVITE CODE</div><div class="invite-code">${esc(state.code)}</div>
       <div class="invite-buttons"><button id="copy-code" class="button light">Copy code</button><button id="share" class="button light">Share invite</button></div></section>
-    <div class="players">${state.players.map(p => `<div class="player-card"><div class="avatar ${p.id === me.id ? '' : 'rival'}">${esc(p.name[0].toUpperCase())}</div><div class="player-info"><strong>${esc(p.name)}${p.id === me.id ? ' (you)' : ''}</strong><small>${p.online ? 'In the clubhouse' : 'Reconnecting…'}</small></div><span class="player-status ${p.ready ? 'ready' : ''}">${p.ready ? '✓ Ready' : 'Not ready'}</span></div>`).join('')}
-    ${!rival ? '<div class="player-card"><div class="avatar rival">?</div><div class="player-info"><strong>A spot for your rival</strong><small>Waiting for them to join…</small></div></div>' : ''}</div>
-    <div class="section"><button id="ready" class="button green full" ${!rival || !connected ? 'disabled' : ''}>${me.ready ? 'Ready ✓ · tap to cancel' : rival ? 'I’m ready. Let’s race.' : 'Waiting for your friend…'}</button>
-      <p class="lobby-note">Once you’re both ready, a three-second countdown starts the race.</p>
+    <section class="lobby-settings"><fieldset class="difficulty-picker"><legend class="field-label">${host ? 'Your board · changing it resets everyone’s Ready' : 'The host’s board choice'}</legend>${difficultyButtons(state.difficulty, !host || !connected)}</fieldset><p class="small-note">Rows × columns. Everyone starts with all tiles hidden on the same randomly mined board. Your first click can hit a mine.</p></section>
+    <div class="players">${state.players.map(p => `<div class="player-card"><div class="avatar ${p.id === me.id ? '' : 'rival'}">${esc(p.name[0].toUpperCase())}</div><div class="player-info"><strong>${esc(p.name)}${p.id === me.id ? ' (you)' : ''}</strong><small>${p.id === state.host ? 'Host · ' : ''}${p.online ? 'In the clubhouse' : 'Reconnecting…'}</small></div><span class="player-status ${p.ready ? 'ready' : ''}">${p.ready ? '✓ Ready' : 'Not ready'}</span></div>`).join('')}</div>
+    <div class="section"><button id="ready" class="button ${me.ready ? 'light' : 'green'} full" ${!connected ? 'disabled' : ''}>${me.ready ? 'Ready ✓ · tap to cancel' : 'I’m ready'}</button>
+      ${host ? `<button id="start-race" class="button blue full start-race" ${!allReady || !connected ? 'disabled' : ''}>Start race · ${state.players.length} ${state.players.length === 1 ? 'player' : 'players'}</button>` : ''}
+      <p class="lobby-note">${host ? 'Invite everyone first. Once all players are ready, tap Start race for the shared countdown.' : 'Mark yourself ready. The host will start the shared countdown.'}</p>
       <div class="race-footer"><button id="leave" class="text-button">Leave room</button><span class="connection ${connected ? '' : 'offline'}">${connected ? 'Connected' : 'Reconnecting…'}</span></div></div>`;
 }
 
 function raceMessage() {
-  const me = you(), rival = opponent();
+  const me = you(), others = rivals();
   if (state.phase === 'finished') {
     const winner = state.players.find(p => p.id === state.winner);
     const title = !winner ? 'An even match.' : winner.id === me.id ? 'This field is yours.' : `${esc(winner.name)} takes the field.`;
     const details = {
       cleared: 'All safe tiles cleared. That’s a clean sweep.',
-      passed: 'The surviving player passed the frozen score.',
-      'both-mines': 'Both hit mines. The safe-tile count decided it.',
-      forfeit: 'The other player conceded the race.',
+      passed: 'The last survivor passed every frozen score.',
+      'all-mines': 'Every player hit a mine. The highest safe-tile count decided it.',
+      forfeit: 'The other players conceded the race.',
     };
-    return `<div class="race-message result" role="status"><strong>${title}</strong>${details[state.reason] || ''} ${!winner ? 'Same score, shared honors.' : ''}</div>`;
+    const tiedNames = state.players.filter(p => state.leaders.includes(p.id)).map(p => esc(p.name)).join(', ');
+    return `<div class="race-message result" role="status"><strong>${title}</strong>${details[state.reason] || ''} ${!winner ? tiedNames ? `Draw: ${tiedNames}.` : 'No winner this time.' : ''}</div>`;
   }
-  if (state.phase === 'countdown') return '<div class="race-message"><strong>A fair start.</strong>Your identical safe opening will reveal when the countdown ends.</div>';
-  if (me.hit) return `<div class="race-message warning" role="status"><strong>You hit a mine.</strong>Your score is frozen at ${me.revealed}. ${esc(rival.name)} needs ${me.revealed + 1} safe tiles to win.</div>`;
-  if (rival.hit) return `<div class="race-message warning" role="status"><strong>Your rival hit a mine.</strong>Reveal ${Math.max(0, rival.revealed + 1 - me.revealed)} more safe ${rival.revealed - me.revealed === 0 ? 'tile' : 'tiles'} to win. Keep your nerve.</div>`;
-  return '<div class="race-message"><strong>Every safe tile counts.</strong>Clear the board first to win. If you hit a mine, your rival gets a chance to beat your score.</div>';
+  if (state.phase === 'countdown') return '<div class="race-message"><strong>A hidden field.</strong>Every tile stays covered when the countdown ends. Mines can be anywhere, including your first click.</div>';
+  if (me.forfeited) return '<div class="race-message warning" role="status"><strong>You conceded.</strong>You can watch the remaining players finish the race.</div>';
+  if (me.hit) return `<div class="race-message warning" role="status"><strong>You hit a mine.</strong>Your score is frozen at ${me.revealed}. The remaining players can still pass it or clear the board.</div>`;
+  const frozen = others.filter(p => p.hit && !p.forfeited), active = others.filter(p => !p.hit && !p.forfeited);
+  if (frozen.length) {
+    const target = Math.max(...frozen.map(p => p.revealed)) + 1;
+    return `<div class="race-message warning" role="status"><strong>${frozen.length} frozen ${frozen.length === 1 ? 'score' : 'scores'}.</strong>${active.length ? `Keep racing ${active.length} other active ${active.length === 1 ? 'player' : 'players'}. A full clear wins immediately.` : `You’re the last survivor. Reveal ${Math.max(0, target - me.revealed)} more safe tiles to beat every frozen score.`}</div>`;
+  }
+  return '<div class="race-message"><strong>Every safe tile counts.</strong>First to clear wins. Hitting a mine freezes your score while the remaining players keep going.</div>';
 }
 
 function renderBoard() {
   const me = you(), finished = state.phase === 'finished';
-  const canPlay = state.phase === 'playing' && !me.hit && connected;
-  const opened = new Set(state.opened);
-  app.innerHTML = `<div class="status-strip"><span class="room-id">${esc(state.code)} · ROUND ${state.round}</span><span class="timer" id="clock">00:00</span></div>
-    <section class="scoreboard" aria-label="Live scores">${state.players.map(p => `<div class="score-card ${p.id === me.id ? '' : 'rival'}"><div class="score-name"><strong>${esc(p.name)}${p.id === me.id ? ' (you)' : ''}</strong><span class="score-tag">${p.hit ? 'MINE' : p.online ? 'LIVE' : 'AWAY'}</span></div><div class="score-count">${p.revealed}<small> / ${state.safe} safe</small></div><progress max="${state.safe}" value="${p.revealed}" aria-label="${esc(p.name)}: ${p.revealed} of ${state.safe} safe tiles"></progress></div>`).join('')}</section>
-    <div class="board-wrap"><div class="board" role="group" aria-label="Your Minesweeper board. Arrow keys move focus; Enter reveals; F flags.">${state.board.map((value, i) => {
-      const isOpen = opened.has(i), flagged = state.flags.includes(i);
+  const canPlay = state.phase === 'playing' && !me.hit && !me.forfeited && connected;
+  const layout = `${state.code}:${state.round}:${state.rows}:${state.columns}`;
+  if (layout !== boardLayout) {
+    boardLayout = layout; mode = 'reveal'; zoom = state.columns === 9 ? 'fit' : 'normal';
+    app.innerHTML = `<div class="status-strip"><span class="room-id">${esc(state.code)} · ROUND ${state.round}</span><span class="timer" id="clock">00:00</span></div>
+      <section class="scoreboard" id="scores" aria-label="Live scores. Swipe to see all players."></section>
+      <details class="standings"><summary>All ${state.players.length} players · standings</summary><div id="standings-list"></div></details>
+      <div class="board-heading"><div class="board-info">${esc(boardDescription())}</div><button id="music-toggle" class="music-toggle" type="button">♫ Music on</button></div>
+      <div class="move-tools"><div class="segmented" role="group" aria-label="Tile action"><button id="mode-reveal" class="mode-button">▦ Reveal</button><button id="mode-flag" class="mode-button">⚑ Flag</button></div><span class="mines-left" id="flags-left"></span></div>
+      <div class="zoom-tools" role="group" aria-label="Board zoom"><button id="zoom-out" class="zoom-button" aria-label="Zoom out">−</button><output id="zoom-label">Fit</output><button id="zoom-in" class="zoom-button" aria-label="Zoom in">+</button><button id="zoom-fit" class="zoom-button text-zoom">Fit</button></div>
+      <div class="board-wrap"><div id="board-viewport" class="board-viewport"><div class="board cols-${state.columns}" id="board" role="group" aria-label="Your Minesweeper board. Arrow keys move focus; Enter reveals; F flags.">${state.board.map((_, i) => `<button class="tile" data-cell="${i}"></button>`).join('')}</div></div><div class="board-mask" id="countdown-mask" hidden><small>GET READY</small><strong id="countdown">3</strong><small>SAME BOARD. SAME START.</small></div></div>
+      <p class="pan-hint">Drag to explore a large board. Zoom in for bigger tiles.</p>
+      <div id="race-feedback"></div><div id="result-actions" class="result-actions"></div>
+      <div class="race-footer"><button id="concede" class="text-button">Concede race</button><button id="leave" class="text-button" hidden>Leave room</button><span id="connection" class="connection"></span></div>`;
+  }
+  // Keep the actual board/scroll container mounted while live scores change.
+  // Rebuilding it on every rival move interrupts touch scrolling on iOS.
+  const scores = document.querySelector('#scores'), scoreScroll = scores.scrollLeft;
+  const ordered = [me, ...state.players.filter(p => p.id !== me.id)];
+  scores.innerHTML = ordered.map(p => `<div class="score-card ${p.id === me.id ? '' : 'rival'}"><div class="score-name"><strong>${esc(p.name)}${p.id === me.id ? ' (you)' : ''}</strong><span class="score-tag">${p.forfeited ? 'OUT' : p.hit ? 'MINE' : p.online ? 'LIVE' : 'AWAY'}</span></div><div class="score-count">${p.revealed}<small> / ${state.safe}</small></div><progress max="${state.safe}" value="${p.revealed}" aria-label="${esc(p.name)}: ${p.revealed} of ${state.safe} safe tiles"></progress></div>`).join('');
+  scores.scrollLeft = scoreScroll;
+  document.querySelector('#standings-list').innerHTML = [...state.players].sort((a, b) => Number(a.forfeited) - Number(b.forfeited) || b.revealed - a.revealed).map(p => `<div class="standing-row"><strong>${esc(p.name)}${p.id === me.id ? ' (you)' : ''}</strong><span>${p.revealed} safe · ${p.left ? 'left' : p.forfeited ? 'conceded' : p.hit ? 'mine' : finished ? p.id === state.winner ? 'winner' : 'finished' : 'racing'}</span></div>`).join('');
+  const opened = new Set(state.opened), flags = new Set(state.flags);
+  document.querySelectorAll('[data-cell]').forEach((tile, i) => {
+      const value = state.board[i];
+      const isOpen = opened.has(i), flagged = flags.has(i);
       const classes = ['tile', isOpen ? `open n${value}` : '', value === -1 ? 'mine' : '', i === state.hit ? 'exploded' : '', flagged && !isOpen && value !== -1 ? 'flag' : ''].filter(Boolean).join(' ');
-      const row = Math.floor(i / state.size) + 1, col = i % state.size + 1;
-      const label = isOpen ? value ? `${value} adjacent mines` : 'empty' : value === -1 ? 'mine' : flagged ? 'flagged' : 'covered';
+      const row = Math.floor(i / state.columns) + 1, col = i % state.columns + 1;
+      const label = value === -1 ? 'mine' : isOpen || finished ? value ? `${value} adjacent mines` : 'empty' : flagged ? 'flagged' : 'covered';
       const text = value === -1 ? '✹' : flagged && !isOpen ? '⚑' : isOpen || finished ? value > 0 ? value : '' : '';
-      return `<button class="${classes}" data-cell="${i}" aria-label="Row ${row}, column ${col}, ${label}" ${canPlay ? '' : 'disabled'}>${text}</button>`;
-    }).join('')}</div>${state.phase === 'countdown' ? '<div class="board-mask"><small>GET READY</small><strong id="countdown">3</strong><small>SAME BOARD. SAME START.</small></div>' : ''}</div>
-    <div class="move-tools"><div class="segmented" role="group" aria-label="Tile action"><button id="mode-reveal" class="mode-button ${mode === 'reveal' ? 'active' : ''}" aria-pressed="${mode === 'reveal'}">▦ Reveal</button><button id="mode-flag" class="mode-button ${mode === 'flag' ? 'active' : ''}" aria-pressed="${mode === 'flag'}">⚑ Flag</button></div><span class="mines-left"><strong>${state.mines - state.flags.length}</strong>flags left</span></div>
-    ${raceMessage()}
-    ${finished ? `<div class="result-actions"><button id="rematch" class="button green full" ${me.rematch || !connected ? 'disabled' : ''}>${me.rematch ? 'Waiting for your rival…' : opponent().rematch ? 'Your rival wants a rematch. Play again?' : 'Same rival. Fresh board.'}</button><p class="micro-note">MATCH WINS · ${state.players.map(p => `${esc(p.name)} ${p.wins}`).join(' / ')}</p></div>` : ''}
-    <div class="race-footer"><button id="${finished ? 'leave' : 'concede'}" class="text-button" ${state.phase === 'countdown' ? 'disabled' : ''}>${finished ? 'Back to clubhouse' : 'Concede race'}</button><span class="connection ${connected ? '' : 'offline'}">${connected ? 'Connected' : 'Reconnecting…'}</span></div>`;
+      tile.className = classes; tile.textContent = text; tile.disabled = !canPlay;
+      tile.setAttribute('aria-label', `Row ${row}, column ${col}, ${label}`);
+  });
+  for (const value of ['reveal', 'flag']) {
+    const button = document.querySelector(`#mode-${value}`);
+    button.classList.toggle('active', mode === value); button.setAttribute('aria-pressed', mode === value);
+  }
+  document.querySelector('#flags-left').innerHTML = `<strong>${state.mines - state.flags.length}</strong>flags left`;
+  document.querySelector('#countdown-mask').hidden = state.phase !== 'countdown';
+  document.querySelector('#race-feedback').innerHTML = raceMessage();
+  document.querySelector('#result-actions').innerHTML = finished ? `${state.host === me.id ? '<button id="next-lobby" class="button green full">Back to lobby · fresh board</button>' : '<p class="lobby-note">Waiting for the host to open the next lobby.</p>'}<p class="micro-note">MATCH WINS · ${state.players.map(p => `${esc(p.name)} ${p.wins}`).join(' / ')}</p>` : '';
+  document.querySelector('#concede').hidden = finished || me.forfeited || me.hit;
+  document.querySelector('#concede').disabled = !connected;
+  document.querySelector('#leave').hidden = !finished && !me.forfeited && !me.hit;
+  const connection = document.querySelector('#connection');
+  connection.textContent = connected ? 'Connected' : 'Reconnecting…'; connection.classList.toggle('offline', !connected);
+  applyZoom();
+  updateMusicControl();
+}
+
+function applyZoom() {
+  const viewport = document.querySelector('#board-viewport'); if (!viewport) return;
+  viewport.className = `board-viewport zoom-${zoom}`;
+  document.querySelector('#zoom-label').textContent = ({ fit: 'Fit', normal: '36 px', large: '44 px', xlarge: '52 px' })[zoom];
+  document.querySelector('#zoom-out').disabled = zoom === 'fit';
+  document.querySelector('#zoom-in').disabled = zoom === 'xlarge';
+}
+function changeZoom(direction) {
+  const viewport = document.querySelector('#board-viewport'); if (!viewport) return;
+  const x = (viewport.scrollLeft + viewport.clientWidth / 2) / viewport.scrollWidth;
+  const y = (viewport.scrollTop + viewport.clientHeight / 2) / viewport.scrollHeight;
+  const levels = ['fit', 'normal', 'large', 'xlarge'];
+  zoom = direction === 'fit' ? 'fit' : levels[Math.max(0, Math.min(3, levels.indexOf(zoom) + direction))];
+  applyZoom();
+  viewport.scrollLeft = x * viewport.scrollWidth - viewport.clientWidth / 2;
+  viewport.scrollTop = y * viewport.scrollHeight - viewport.clientHeight / 2;
 }
 
 function updateClock() {
@@ -223,7 +308,7 @@ async function enterRoom(kind) {
   const buttons = app.querySelectorAll('#create, #show-join, #join-form button');
   buttons.forEach(button => { button.disabled = true; });
   try {
-    const result = await api(kind === 'create' ? '' : `/${code}/join`, { name });
+    const result = await api(kind === 'create' ? '' : `/${code}/join`, { name, ...(kind === 'create' ? { difficulty: selectedDifficulty } : {}) });
     activate(result);
   } catch (error) { toast(error.status ? error.message : 'Couldn’t reach the server. Please try again.'); }
   finally { busy = false; buttons.forEach(button => { button.disabled = false; }); }
@@ -245,6 +330,16 @@ async function copy(text, success) {
   catch { window.prompt('Copy this invite:', text); }
 }
 
+async function leave() {
+  if (!session || busy) return;
+  const active = { ...session }; busy = true;
+  try {
+    await api(`/${active.code}/leave`, {}, active.token);
+    storage.remove('sweep-session'); lastStoredSession = null; goHome();
+  } catch (error) { toast(error.status ? error.message : 'Couldn’t leave the room. Please try again.'); }
+  finally { busy = false; }
+}
+
 app.addEventListener('submit', event => { if (event.target.id === 'join-form') { event.preventDefault(); enterRoom('join'); } });
 app.addEventListener('input', event => {
   if (event.target.id === 'join-code') event.target.value = event.target.value.toUpperCase().replace(/[^A-Z2-9]/g, '').slice(0, 6);
@@ -252,7 +347,16 @@ app.addEventListener('input', event => {
 app.addEventListener('click', async event => {
   const button = event.target.closest('button');
   if (!button || button.disabled) return;
+  if (button.dataset.difficulty) {
+    const difficulty = button.dataset.difficulty;
+    if (screen === 'home') {
+      selectedDifficulty = difficulty; storage.set('sweep-difficulty', difficulty);
+      app.querySelectorAll('[data-difficulty]').forEach(b => { b.classList.toggle('chosen', b.dataset.difficulty === difficulty); b.setAttribute('aria-pressed', b.dataset.difficulty === difficulty); });
+    } else if (difficulty !== state.difficulty) move('settings', undefined, { difficulty });
+    return;
+  }
   if (button.dataset.cell !== undefined) {
+    music.unlock();
     const index = Number(button.dataset.cell);
     const type = mode === 'flag' ? 'flag' : state.opened.includes(index) ? 'chord' : 'reveal';
     move(type, index); return;
@@ -261,12 +365,17 @@ app.addEventListener('click', async event => {
     case 'create': enterRoom('create'); break;
     case 'show-join': document.querySelector('#join-area').hidden = false; document.querySelector('#join-code').focus(); break;
     case 'resume': resume(); break;
-    case 'ready': move('ready'); break;
-    case 'rematch': move('rematch'); break;
-    case 'leave': goHome(); break;
-    case 'concede': if (window.confirm('Concede this race? Your rival will win.')) move('forfeit'); break;
+    case 'ready': music.unlock(); move('ready'); break;
+    case 'start-race': music.unlock(); move('start'); break;
+    case 'music-toggle': music.toggle(); break;
+    case 'next-lobby': move('lobby'); break;
+    case 'leave': leave(); break;
+    case 'concede': if (window.confirm('Concede this race? Your score will no longer count.')) move('forfeit'); break;
     case 'mode-reveal': mode = 'reveal'; renderRace(); break;
     case 'mode-flag': mode = 'flag'; renderRace(); break;
+    case 'zoom-in': changeZoom(1); break;
+    case 'zoom-out': changeZoom(-1); break;
+    case 'zoom-fit': changeZoom('fit'); break;
     case 'copy-code': copy(state.code, 'Invite code copied.'); break;
     case 'share': {
       const url = `${location.origin}/?room=${state.code}`;
@@ -286,12 +395,12 @@ app.addEventListener('contextmenu', event => {
 app.addEventListener('keydown', event => {
   const tile = event.target.closest('[data-cell]');
   if (!tile || tile.disabled) return;
-  const index = Number(tile.dataset.cell), row = Math.floor(index / 9), col = index % 9;
+  const index = Number(tile.dataset.cell), row = Math.floor(index / state.columns), col = index % state.columns;
   let next = index;
   if (event.key === 'ArrowLeft' && col > 0) next--;
-  else if (event.key === 'ArrowRight' && col < 8) next++;
-  else if (event.key === 'ArrowUp' && row > 0) next -= 9;
-  else if (event.key === 'ArrowDown' && row < 8) next += 9;
+  else if (event.key === 'ArrowRight' && col < state.columns - 1) next++;
+  else if (event.key === 'ArrowUp' && row > 0) next -= state.columns;
+  else if (event.key === 'ArrowDown' && row < state.rows - 1) next += state.columns;
   else if (event.key.toLowerCase() === 'f') { event.preventDefault(); move('flag', index); return; }
   else return;
   event.preventDefault(); app.querySelector(`[data-cell="${next}"]`)?.focus();
@@ -302,11 +411,12 @@ for (const id of ['close-rules', 'got-it']) document.getElementById(id).addEvent
 document.querySelector('#nav-play').addEventListener('click', () => {
   if (screen === 'home') return;
   if (['playing', 'countdown'].includes(state?.phase)) return toast('Finish or concede your race to leave the board.');
-  goHome();
+  leave();
 });
 document.addEventListener('visibilitychange', () => {
   // iOS suspends hidden tabs. Resume by fetching the authoritative server state.
   generation++; clearTimeout(pollTimer);
+  music.update({ phase: 'paused', visible: false, connected: false });
   if (!document.hidden && session) poll(generation);
 });
 window.addEventListener('pageshow', event => {
@@ -314,6 +424,7 @@ window.addEventListener('pageshow', event => {
 });
 window.addEventListener('online', () => { if (session) { generation++; clearTimeout(pollTimer); poll(generation); } });
 window.addEventListener('offline', () => { if (session) { connected = false; renderKey = ''; renderRace(); } });
+window.addEventListener('pagehide', () => music.update({ phase: 'paused', visible: false, connected: false }));
 
 renderHome();
 if (lastStoredSession && (!invite || lastStoredSession.code === invite)) resume();

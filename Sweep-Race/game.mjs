@@ -1,159 +1,186 @@
 import { randomInt, randomBytes } from 'node:crypto';
 
-export const SIZE = 9;
-export const MINES = 12;
-export const CENTER = 40;
-export const SAFE = SIZE * SIZE - MINES;
+export const MAX_PLAYERS = 8;
 export const COUNTDOWN_MS = 3000;
+export const BOARD_OPTIONS = Object.freeze({
+  easy: Object.freeze({ name: 'Easy', rows: 9, columns: 9, mines: 10 }),
+  medium: Object.freeze({ name: 'Medium', rows: 16, columns: 16, mines: 40 }),
+  hard: Object.freeze({ name: 'Hard', rows: 30, columns: 16, mines: 99 }),
+});
 
 export class GameError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
 }
 
-export function neighbors(index) {
-  const result = [];
-  const row = Math.floor(index / SIZE), col = index % SIZE;
+export function neighbors(index, rows, columns) {
+  const result = [], row = Math.floor(index / columns), col = index % columns;
   for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
     if (!dr && !dc) continue;
     const r = row + dr, c = col + dc;
-    if (r >= 0 && r < SIZE && c >= 0 && c < SIZE) result.push(r * SIZE + c);
+    if (r >= 0 && r < rows && c >= 0 && c < columns) result.push(r * columns + c);
   }
   return result;
 }
 
-function candidateBoard() {
-  const excluded = new Set([CENTER, ...neighbors(CENTER)]);
-  const cells = Array.from({ length: SIZE * SIZE }, (_, i) => i).filter(i => !excluded.has(i));
-  // Partial Fisher-Yates shuffle; randomness stays on the server.
-  const board = Array(SIZE * SIZE).fill(0);
-  for (let i = 0; i < MINES; i++) {
-    const j = randomInt(i, cells.length);
+function flood(board, rows, columns, revealed, flags, index) {
+  const stack = [index];
+  while (stack.length) {
+    const cell = stack.pop();
+    if (revealed.has(cell) || flags.has(cell) || board[cell] === -1) continue;
+    revealed.add(cell);
+    if (board[cell] === 0) stack.push(...neighbors(cell, rows, columns));
+  }
+}
+
+export function generateBoard(settings, random = randomInt) {
+  const { rows, columns, mines } = settings;
+  const cells = Array.from({ length: rows * columns }, (_, i) => i);
+  const board = Array(rows * columns).fill(0);
+  // Uniform sampling without replacement across the entire board. No safe
+  // region, retries for a preferred layout, or first-click mine relocation.
+  for (let i = 0; i < mines; i++) {
+    const j = random(i, cells.length);
     [cells[i], cells[j]] = [cells[j], cells[i]];
     board[cells[i]] = -1;
   }
   for (let i = 0; i < board.length; i++) {
-    if (board[i] !== -1) board[i] = neighbors(i).filter(n => board[n] === -1).length;
+    if (board[i] !== -1) board[i] = neighbors(i, rows, columns).filter(n => board[n] === -1).length;
   }
-  return board;
+  return { board };
 }
 
-export function generateBoard() {
-  // Keep the shared opening useful without letting it auto-clear a board.
-  for (;;) {
-    const board = candidateBoard();
-    const player = { revealed: new Set(), flags: new Set() };
-    flood({ board }, player, CENTER);
-    if (player.revealed.size <= 40) return board;
-  }
-}
-
-export function newPlayer(name) {
+export function newPlayer(name, now = Date.now()) {
   return { id: randomBytes(12).toString('hex'), token: randomBytes(32).toString('hex'), name,
-    ready: false, revealed: new Set(), flags: new Set(), hit: null, rematch: false, wins: 0, seenAt: Date.now() };
+    ready: false, revealed: new Set(), flags: new Set(), hit: null, forfeited: false,
+    left: false, wins: 0, seenAt: now };
 }
 
-export function createRoom(code, name, now = Date.now()) {
-  return { code, board: generateBoard(), players: [newPlayer(name)], phase: 'lobby',
-    startAt: null, endAt: null, winner: null, reason: null, round: 1, revision: 0,
-    createdAt: now, touchedAt: now };
-}
-
-function flood(room, player, index) {
-  const stack = [index];
-  while (stack.length) {
-    const cell = stack.pop();
-    if (player.revealed.has(cell) || player.flags.has(cell) || room.board[cell] === -1) continue;
-    player.revealed.add(cell);
-    if (room.board[cell] === 0) stack.push(...neighbors(cell));
+function setBoard(room, difficulty) {
+  if (typeof difficulty !== 'string' || !Object.hasOwn(BOARD_OPTIONS, difficulty)) throw new GameError('Choose Easy, Medium, or Hard.');
+  const config = BOARD_OPTIONS[difficulty];
+  Object.assign(room, config, { difficulty, safe: config.rows * config.columns - config.mines }, generateBoard(config));
+  for (const p of room.players) {
+    p.ready = false; p.revealed.clear(); p.flags.clear(); p.hit = null; p.forfeited = false;
   }
 }
 
-function finish(room, winner, reason, now) {
-  room.phase = 'finished'; room.winner = winner?.id ?? null; room.reason = reason; room.endAt = now;
-  if (winner) winner.wins++;
+export function createRoom(code, name, now = Date.now(), difficulty = 'easy') {
+  const host = newPlayer(name, now);
+  const room = { code, players: [host], host: host.id, phase: 'lobby', startAt: null,
+    endAt: null, winner: null, leaders: [], reason: null, round: 1, revision: 0,
+    createdAt: now, touchedAt: now };
+  setBoard(room, difficulty);
+  return room;
+}
+
+function finish(room, leaders, reason, now) {
+  room.phase = 'finished'; room.leaders = leaders.map(p => p.id);
+  room.winner = leaders.length === 1 ? leaders[0].id : null;
+  room.reason = reason; room.endAt = now;
+  if (leaders.length === 1) leaders[0].wins++;
   room.revision++;
 }
 
-function mostTiles(room) {
-  const [a, b] = room.players;
-  return a.revealed.size === b.revealed.size ? null : a.revealed.size > b.revealed.size ? a : b;
+function topScores(players) {
+  const max = Math.max(...players.map(p => p.revealed.size));
+  return players.filter(p => p.revealed.size === max);
 }
 
 function resolve(room, now) {
-  const cleared = room.players.find(p => p.revealed.size === SAFE);
-  if (cleared) return finish(room, cleared, 'cleared', now);
-  if (room.players.every(p => p.hit !== null)) return finish(room, mostTiles(room), 'both-mines', now);
-  const busted = room.players.find(p => p.hit !== null);
-  const alive = room.players.find(p => p.hit === null);
-  if (busted && alive.revealed.size > busted.revealed.size) finish(room, alive, 'passed', now);
+  const eligible = room.players.filter(p => !p.forfeited);
+  const cleared = eligible.find(p => p.revealed.size === room.safe);
+  if (cleared) return finish(room, [cleared], 'cleared', now);
+  const alive = eligible.filter(p => p.hit === null);
+  if (!alive.length) return finish(room, topScores(eligible), eligible.length ? 'all-mines' : 'forfeit', now);
+  if (alive.length === 1) {
+    const frozen = eligible.filter(p => p.hit !== null);
+    if (frozen.every(p => alive[0].revealed.size > p.revealed.size)) {
+      finish(room, alive, frozen.length ? 'passed' : 'forfeit', now);
+    }
+  }
 }
 
 export function advance(room, now = Date.now()) {
   if (room.phase === 'countdown' && now >= room.startAt) {
     room.phase = 'playing';
-    // Both boards open the same safe area at the same instant.
-    for (const player of room.players) flood(room, player, CENTER);
     room.revision++;
   }
 }
 
 export function joinRoom(room, name, now = Date.now()) {
   advance(room, now);
-  if (room.players.length >= 2) throw new GameError('This room already has two players.', 409);
+  if (room.players.filter(p => !p.left).length >= MAX_PLAYERS) throw new GameError('This room already has eight players.', 409);
   if (room.phase !== 'lobby') throw new GameError('This race has already started.', 409);
-  const player = newPlayer(name);
+  const player = newPlayer(name, now);
   room.players.push(player); room.revision++; room.touchedAt = now;
   return player;
 }
 
+export function leaveRoom(room, player, now = Date.now()) {
+  advance(room, now);
+  if (room.phase === 'lobby') room.players = room.players.filter(p => p.id !== player.id);
+  else if (room.phase === 'finished') player.left = true;
+  else {
+    if (player.hit === null) player.forfeited = true;
+    player.left = true;
+    resolve(room, now);
+  }
+  if (room.host === player.id) room.host = room.players.find(p => !p.left)?.id ?? null;
+  room.revision++; room.touchedAt = now;
+}
+
 export function act(room, player, action, now = Date.now()) {
   advance(room, now);
+  if (player.left) throw new GameError('You left this room.', 403);
   player.seenAt = now; room.touchedAt = now;
   if (action.type === 'ready') {
     if (room.phase !== 'lobby') throw new GameError('The race has already started.', 409);
     player.ready = !player.ready;
-    if (room.players.length === 2 && room.players.every(p => p.ready)) {
-      room.phase = 'countdown'; room.startAt = now + COUNTDOWN_MS;
-    }
-  } else if (action.type === 'rematch') {
+  } else if (action.type === 'start') {
+    if (player.id !== room.host) throw new GameError('Only the host can start the race.', 403);
+    if (room.phase !== 'lobby') throw new GameError('The race has already started.', 409);
+    if (room.players.length < 2 || !room.players.every(p => p.ready)) throw new GameError('At least two players must join and everyone must be ready.', 409);
+    room.phase = 'countdown'; room.startAt = now + COUNTDOWN_MS;
+  } else if (action.type === 'settings') {
+    if (player.id !== room.host) throw new GameError('Only the host can choose the board.', 403);
+    if (room.phase !== 'lobby') throw new GameError('Board settings are locked during a race.', 409);
+    setBoard(room, action.difficulty);
+  } else if (action.type === 'lobby') {
+    if (player.id !== room.host) throw new GameError('Only the host can open the next lobby.', 403);
     if (room.phase !== 'finished') throw new GameError('Finish this race first.', 409);
-    player.rematch = true;
-    if (room.players.length === 2 && room.players.every(p => p.rematch)) {
-      room.board = generateBoard(); room.round++; room.phase = 'countdown';
-      room.startAt = now + COUNTDOWN_MS; room.endAt = null; room.winner = null; room.reason = null;
-      for (const p of room.players) {
-        p.revealed.clear(); p.flags.clear(); p.hit = null; p.rematch = false; p.ready = true;
-      }
-    }
+    room.players = room.players.filter(p => !p.left);
+    setBoard(room, room.difficulty);
+    room.round++; room.phase = 'lobby'; room.startAt = null; room.endAt = null;
+    room.winner = null; room.leaders = []; room.reason = null;
   } else if (action.type === 'forfeit') {
     if (!['countdown', 'playing'].includes(room.phase)) throw new GameError('There is no active race.', 409);
-    finish(room, room.players.find(p => p.id !== player.id), 'forfeit', now);
+    if (player.forfeited) throw new GameError('You already conceded.', 409);
+    player.forfeited = true;
+    resolve(room, now);
   } else {
     if (!['reveal', 'flag', 'chord'].includes(action.type)) throw new GameError('Unknown move.');
     if (room.phase !== 'playing') throw new GameError('The race is not in progress.', 409);
-    if (player.hit !== null) throw new GameError('You hit a mine. Your score is frozen.', 409);
+    if (player.hit !== null || player.forfeited) throw new GameError('Your score is frozen. You can watch the remaining players.', 409);
     const i = action.index;
     if (!Number.isInteger(i) || i < 0 || i >= room.board.length) throw new GameError('Invalid tile.');
     if (action.type === 'flag') {
       if (!player.revealed.has(i)) {
         if (player.flags.has(i)) player.flags.delete(i);
-        else if (player.flags.size < MINES) player.flags.add(i);
+        else if (player.flags.size < room.mines) player.flags.add(i);
       }
     } else if (action.type === 'chord') {
-      // Revealing a numbered tile with the matching number of adjacent flags
-      // opens its remaining neighbors. Incorrect flags can hit a mine.
       if (player.revealed.has(i) && room.board[i] > 0 &&
-          neighbors(i).filter(n => player.flags.has(n)).length === room.board[i]) {
-        for (const n of neighbors(i)) {
+          neighbors(i, room.rows, room.columns).filter(n => player.flags.has(n)).length === room.board[i]) {
+        for (const n of neighbors(i, room.rows, room.columns)) {
           if (player.flags.has(n) || player.revealed.has(n)) continue;
           if (room.board[n] === -1) { player.hit = n; break; }
-          flood(room, player, n);
-          if (player.revealed.size === SAFE) break;
+          flood(room.board, room.rows, room.columns, player.revealed, player.flags, n);
+          if (player.revealed.size === room.safe) break;
         }
       }
     } else if (!player.flags.has(i) && !player.revealed.has(i)) {
       if (room.board[i] === -1) player.hit = i;
-      else flood(room, player, i);
+      else flood(room.board, room.rows, room.columns, player.revealed, player.flags, i);
     }
     resolve(room, now);
   }
@@ -164,11 +191,11 @@ export function view(room, player, now = Date.now()) {
   advance(room, now);
   return {
     code: room.code, phase: room.phase, round: room.round, revision: room.revision,
-    serverNow: now, startAt: room.startAt, endAt: room.endAt,
-    winner: room.winner, reason: room.reason, size: SIZE, mines: MINES, safe: SAFE, you: player.id,
+    serverNow: now, startAt: room.startAt, endAt: room.endAt, host: room.host, maxPlayers: MAX_PLAYERS,
+    winner: room.winner, leaders: room.leaders, reason: room.reason, difficulty: room.difficulty,
+    rows: room.rows, columns: room.columns, mines: room.mines, safe: room.safe, you: player.id,
     players: room.players.map(p => ({ id: p.id, name: p.name, ready: p.ready, revealed: p.revealed.size,
-      hit: p.hit !== null, rematch: p.rematch, wins: p.wins, online: now - p.seenAt < 10000 })),
-    // Never send unrevealed mines or the opponent's board during a race.
+      hit: p.hit !== null, forfeited: p.forfeited, left: p.left, wins: p.wins, online: now - p.seenAt < 10000 })),
     board: room.board.map((value, i) => player.revealed.has(i) || i === player.hit || room.phase === 'finished' ? value : player.flags.has(i) ? -3 : -2),
     opened: [...player.revealed], flags: [...player.flags], hit: player.hit,
   };
