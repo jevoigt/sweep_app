@@ -1,113 +1,132 @@
-// Original, synthesized lounge music. No audio downloads or third-party tracks.
-const BARS = [
-  { chord: [60, 64, 67, 71], bass: 36, melody: [76, null, 79, 81, null, 79, 76, 74] },
-  { chord: [57, 60, 64, 67], bass: 33, melody: [72, 76, null, 79, 76, 74, null, 72] },
-  { chord: [60, 64, 65, 69], bass: 38, melody: [77, null, 76, 74, null, 72, 69, 72] },
-  { chord: [59, 62, 65, 69], bass: 31, melody: [74, 77, null, 76, 74, null, 71, 69] },
-  { chord: [59, 62, 64, 67], bass: 40, melody: [76, null, 79, 83, 81, 79, null, 76] },
-  { chord: [61, 64, 67, 71], bass: 33, melody: [73, 76, null, 79, 76, 73, null, 71] },
-  { chord: [60, 64, 65, 69], bass: 38, melody: [74, null, 77, 76, 74, 72, null, 69] },
-  { chord: [59, 62, 65, 69], bass: 31, melody: [71, 74, null, 77, 76, 74, 71, null] },
-];
-const BEAT = 60 / 88;
+import { PLAYLIST } from './playlist.js';
 
-export class ElevatorMusic {
-  constructor({ createContext, every = (fn, ms) => globalThis.setInterval(fn, ms), cancel = id => globalThis.clearInterval(id), onChange = () => {}, storage } = {}) {
-    this.createContext = createContext || (() => {
-      const Audio = globalThis.AudioContext || globalThis.webkitAudioContext;
-      if (!Audio) throw new Error('Web Audio unavailable');
-      return new Audio();
-    });
-    this.every = every; this.cancel = cancel; this.onChange = onChange; this.storage = storage;
+export class GameMusic {
+  constructor({ tracks = PLAYLIST, createAudio = () => new Audio(), createContext, now = () => Date.now(), onChange = () => {}, storage } = {}) {
+    this.tracks = tracks; this.createAudio = createAudio;
+    this.createContext = createContext || (() => new (globalThis.AudioContext || globalThis.webkitAudioContext)());
+    this.now = now; this.onChange = onChange; this.storage = storage;
     this.enabled = storage?.get('sweep-music') !== 'off';
-    this.context = null; this.master = null; this.voices = new Set(); this.timer = null;
-    this.playing = false; this.unavailable = false; this.phase = 'home'; this.visible = true; this.connected = false;
-    this.step = 0; this.nextAt = 0;
+    this.audio = null; this.context = null; this.gain = null;
+    this.playing = false; this.pending = false; this.priming = false; this.unlocked = false; this.blocked = false; this.unavailable = false;
+    this.phase = 'home'; this.visible = true; this.connected = false;
+    this.key = null; this.index = 0; this.elapsedMs = 0; this.sampledAt = this.now(); this.operation = 0;
   }
 
-  // Call directly from a tap/click, before awaiting a network request. Resuming
-  // the context unlocks audio but schedules no sound in the lobby/countdown.
+  get title() { return this.tracks[this.index]?.title || ''; }
+  wanted() { return this.enabled && this.phase === 'playing' && this.visible && this.connected; }
+
+  ensure() {
+    if (this.audio) return;
+    this.audio = this.createAudio(); this.audio.preload = 'metadata'; this.audio.loop = false;
+    this.audio.setAttribute?.('playsinline', '');
+    this.context = this.createContext();
+    this.gain = this.context.createGain(); this.gain.gain.value = 0;
+    this.source = this.context.createMediaElementSource(this.audio);
+    this.source.connect(this.gain); this.gain.connect(this.context.destination);
+    this.select(0);
+    this.context.onstatechange = () => this.reconcile();
+    this.audio.onended = () => {
+      if (!this.wanted()) return this.stop();
+      this.playing = false; this.pending = false;
+      this.select((this.index + 1) % this.tracks.length);
+      this.attempt();
+    };
+    this.audio.onerror = () => { this.blocked = true; this.stop(); this.onChange(); };
+    this.audio.onpause = () => {
+      if (!this.playing) return;
+      this.playing = false; this.blocked = true; this.gain.gain.value = 0; this.onChange();
+    };
+    this.audio.onloadedmetadata = () => {
+      if (this.seekTarget === null) return;
+      try { this.audio.currentTime = this.seekTarget; this.seekTarget = null; } catch {}
+    };
+  }
+
+  select(index) {
+    this.index = index;
+    if (!this.audio) return;
+    this.audio.src = `/music/${encodeURIComponent(this.tracks[index].file)}`;
+    this.seekTarget = 0;
+    try { this.audio.currentTime = 0; } catch {}
+  }
+
+  align() {
+    const duration = this.tracks.reduce((sum, track) => sum + track.duration, 0);
+    let seconds = Math.max(0, this.elapsedMs + this.now() - this.sampledAt) / 1000 % duration;
+    let index = 0;
+    while (index < this.tracks.length - 1 && seconds >= this.tracks[index].duration) seconds -= this.tracks[index++].duration;
+    if (this.index !== index) this.select(index);
+    this.seekTarget = seconds;
+    try { this.audio.currentTime = seconds; } catch {}
+  }
+
+  // Call directly from Ready/Start or a tile tap. The media element is routed
+  // through a zero-gain Web Audio node until gameplay, including on iOS where
+  // the HTMLAudioElement.volume property alone cannot guarantee silence.
   unlock() {
     if (!this.enabled || this.unavailable) return;
     try {
-      if (!this.context) {
-        this.context = this.createContext();
-        this.master = this.context.createGain();
-        this.master.gain.value = .22;
-        this.master.connect(this.context.destination);
-        this.context.onstatechange = () => this.reconcile();
-      }
+      this.ensure(); this.blocked = false;
+      if (this.playing && this.context.state === 'running') return;
       const resumed = this.context.state === 'running' ? Promise.resolve() : this.context.resume();
-      Promise.resolve(resumed).then(() => this.reconcile()).catch(() => { this.stop(); this.onChange(); });
-      this.reconcile();
+      Promise.resolve(resumed).then(() => this.reconcile()).catch(() => { this.blocked = true; this.stop(); this.onChange(); });
+      if (this.wanted()) this.align();
+      this.attempt(); // Stay inside the user gesture for media autoplay permission.
     } catch { this.unavailable = true; this.stop(); this.onChange(); }
   }
 
-  update({ phase, visible, connected }) {
+  attempt() {
+    if (!this.audio || this.pending) return;
+    const operation = ++this.operation;
+    this.pending = true; this.priming = !this.wanted();
+    this.gain.gain.value = this.wanted() && this.context.state === 'running' ? .22 : 0;
+    let promise;
+    try { promise = this.audio.play(); this.unlocked = true; }
+    catch { promise = Promise.reject(new Error('Playback blocked')); }
+    Promise.resolve(promise).then(() => {
+      if (operation !== this.operation) return;
+      this.pending = false; this.priming = false; this.unlocked = true;
+      if (this.wanted() && this.context.state === 'running') {
+        this.playing = true; this.gain.gain.value = .22;
+      } else {
+        this.playing = false; this.gain.gain.value = 0; this.audio.pause();
+      }
+      this.onChange();
+    }).catch(() => {
+      if (operation !== this.operation) return;
+      this.blocked = true; this.stop(); this.onChange();
+    });
+  }
+
+  update({ phase, visible, connected, key, elapsedMs }) {
+    if (key !== undefined && key !== this.key) {
+      this.stop(); this.key = key; this.index = 0;
+      if (this.audio) this.select(0);
+    }
+    if (Number.isFinite(elapsedMs)) { this.elapsedMs = elapsedMs; this.sampledAt = this.now(); }
     this.phase = phase; this.visible = visible; this.connected = connected;
     this.reconcile();
   }
 
-  toggle() {
-    // If the browser blocked audio, a tap retries playback instead of muting.
-    if (this.enabled && this.phase === 'playing' && this.context?.state !== 'running') return this.unlock();
-    this.enabled = !this.enabled;
-    this.storage?.set('sweep-music', this.enabled ? 'on' : 'off');
-    if (this.enabled) this.unlock();
-    this.reconcile();
+  reconcile() {
+    if (!this.wanted() || this.context?.state !== 'running') {
+      if (this.playing || (this.pending && !this.priming)) this.stop();
+    } else if (this.unlocked && !this.blocked && !this.playing && !this.pending) {
+      this.align(); this.attempt();
+    }
+    this.onChange();
   }
 
-  reconcile() {
-    const wanted = this.enabled && this.phase === 'playing' && this.visible && this.connected && this.context?.state === 'running';
-    if (wanted && !this.playing) {
-      this.playing = true; this.step = 0; this.nextAt = this.context.currentTime + .04;
-      this.schedule();
-      this.timer = this.every(() => this.schedule(), 80);
-    } else if (!wanted && this.playing) this.stop();
+  toggle() {
+    if (this.enabled && this.phase === 'playing' && !this.playing && !this.pending) return this.unlock();
+    this.enabled = !this.enabled; this.storage?.set('sweep-music', this.enabled ? 'on' : 'off');
+    if (this.enabled) this.unlock(); else this.stop();
     this.onChange();
   }
 
   stop() {
-    this.playing = false;
-    if (this.timer !== null) this.cancel(this.timer);
-    this.timer = null;
-    // Cancel already scheduled notes as well as the loop. No tail in a lobby.
-    for (const source of this.voices) { try { source.stop(); } catch {} }
-    this.voices.clear();
-  }
-
-  tone(midi, when, duration, volume, type = 'sine') {
-    const source = this.context.createOscillator(), envelope = this.context.createGain();
-    source.type = type;
-    source.frequency.setValueAtTime(440 * 2 ** ((midi - 69) / 12), when);
-    envelope.gain.setValueAtTime(.0001, when);
-    envelope.gain.exponentialRampToValueAtTime(volume, when + .016);
-    envelope.gain.exponentialRampToValueAtTime(.0001, when + duration);
-    source.connect(envelope); envelope.connect(this.master);
-    this.voices.add(source);
-    source.onended = () => { this.voices.delete(source); source.disconnect(); envelope.disconnect(); };
-    source.start(when); source.stop(when + duration + .02);
-  }
-
-  schedule() {
-    if (!this.playing || this.context.state !== 'running') return;
-    const now = this.context.currentTime;
-    if (this.nextAt < now) this.nextAt = now + .04; // Don’t catch up missed notes after a stall.
-    while (this.nextAt < now + .2) {
-      const bar = BARS[Math.floor(this.step / 8) % BARS.length], eighth = this.step % 8, at = this.nextAt;
-      if ([0, 3, 6].includes(eighth)) {
-        for (const note of bar.chord) {
-          this.tone(note, at, BEAT * 1.5, .075);
-          this.tone(note + 12, at, BEAT * .65, .012);
-        }
-      }
-      if (eighth === 0 || eighth === 4) this.tone(bar.bass + (eighth === 4 ? 7 : 0), at, BEAT * 1.65, .15, 'triangle');
-      if (bar.melody[eighth] !== null) {
-        this.tone(bar.melody[eighth], at, BEAT * 1.1, .105);
-        this.tone(bar.melody[eighth] + 12, at, BEAT * .4, .012);
-      }
-      this.nextAt += BEAT * (eighth % 2 ? .4 : .6);
-      this.step = (this.step + 1) % (BARS.length * 8);
-    }
+    this.operation++; this.pending = false; this.priming = false; this.playing = false;
+    if (this.gain) this.gain.gain.value = 0;
+    this.audio?.pause();
   }
 }

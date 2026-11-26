@@ -21,7 +21,7 @@ The test suite covers:
 
 ## Browser checks
 
-The development session checked the smiling-mine homepage, the board picker, an eight-player Hard game with 480 tiles, the next-round lobby and Medium selection, zoom controls, Fit, keyboard movement, mobile Flag mode, and reconnection after refresh. A rival move preserved the host’s horizontal and vertical board scroll positions. The board’s container holds the horizontal overflow instead of widening the page.
+The development session checked the smiling-mine homepage, the board picker, an eight-player Hard game with 480 tiles, the next-round lobby and Medium selection, zoom controls, Fit, keyboard movement, tap/hold tile controls, and reconnection after refresh. A rival move preserved the host’s horizontal and vertical board scroll positions. The board’s container holds the horizontal overflow instead of widening the page.
 
 The browser used desktop Chromium with phone-sized layouts. This does not verify real iOS Safari/WebKit, actual hardware touch, browser suspension, or the native share sheet.
 
@@ -29,14 +29,17 @@ The browser used desktop Chromium with phone-sized layouts. This does not verify
 
 After deploying, test on two or more devices; use eight participants for the capacity check:
 
-- [ ] Homepage shows the smiling mine and all three board choices.
+- [ ] Homepage shows the smiling mine and the three presets and Custom option.
 - [ ] Easy has 9 rows × 9 columns / 10 mines; Medium 16 × 16 / 40; Hard 30 rows × 16 columns / 99.
 - [ ] Native Share Invite includes the deployed HTTPS URL; joining by code or link works.
 - [ ] Up to eight players can join; a ninth is rejected.
 - [ ] Ready alone does not start early; the host starts only when at least two players have joined and everyone is ready.
 - [ ] Changing board choice resets every player’s Ready state.
 - [ ] Every player starts with all tiles hidden and a zero score. Mines can occur anywhere, and a first-click mine is allowed.
-- [ ] Reveal and Flag work without right-clicking. Wrongly flagged chords can hit a mine.
+- [ ] A quick tap reveals exactly once; a stationary hold flags exactly once and does not reveal on release.
+- [ ] Holding a flagged tile unflags it; tapping a flagged tile does not reveal it.
+- [ ] Dragging, scrolling, pointer cancellation, app switching, and two-finger pinch cancel an unfinished hold without flagging/revealing.
+- [ ] Desktop right-click and keyboard F still flag. Wrongly flagged chords can hit a mine.
 - [ ] + / − resize tiles; Fit shows the full width; there is no Opening button.
 - [ ] Swipe/drag scrolls large boards in both directions without accidentally revealing tiles.
 - [ ] Rival score updates preserve the board’s scroll position and zoom.
@@ -57,3 +60,25 @@ The automated audio tests verify that home/lobby/countdown/results stay silent, 
 On a real iPhone, additionally check that Ready/Start makes no sound in the lobby, music starts after the countdown, mute works and persists, switching apps silences it, and the Tap for music fallback resumes after Safari interruptions. Confirm the quiet volume and musical balance on physical speakers/headphones.
 
 Browser verification confirmed silence during countdown, automatic playback after the countdown, mute/unmute, silence at the result, and removal of the music control when returning to the lobby. The native timer binding has a regression test.
+
+Gesture-state tests cover short taps, holds, release-click suppression, dragging, pointer cancellation, multi-touch, later intentional taps, and keyboard activation. Real iOS Safari hold/callout behavior should also be checked on a device.
+
+Browser gesture verification passed: a 650 ms press flagged without revealing, tapping the flagged tile kept it protected, another hold unflagged it, and a short tap revealed normally. Dragging did not change revealed/flag counts. At 390 px width there was no horizontal page overflow and no mode buttons remained. These checks used a desktop browser; physical iOS touch/callout checks remain on the device checklist.
+
+
+## Daily, Custom, explosion, and icon update
+
+Automated tests cover fixed-EST date boundaries in winter and summer, daily layout determinism/date changes, solo clear/mine/end outcomes, elapsed times, browser-journal persistence and retry counts, failure denominator and snark formatting, exact 50×50 generation, server-side custom bounds and guest restrictions, all-mine/zero-mine cases, settings across new rounds, explosion context/mute behavior, and the actual daily HTTP endpoints.
+
+Browser verification passed for a fully hidden 256-tile daily start, mine failure, retry #2 on the same board, copied snarky results, attempt count after reload and tab navigation, rejection of 2,501 mines on 50×50, and a running 2,500-tile Custom race. At a 390 px viewport, the page stayed 390 px wide while the 1,996 px board scrolled inside its container. No browser errors were recorded. The host-selected 50 rows / 50 columns / 400 mines were identical in the guest’s state.
+
+On real iOS Safari, additionally check the explosion’s volume and sound-mode behavior, separate Sound/Music toggles, the Daily tab and clipboard copy, reload/resume without an extra attempt, host-only custom controls, and large-board touch scrolling/holding. Favicon caching may require reloading the site.
+
+
+## Five-track MP3 playlist update
+
+Tests verify the exact supplied order, fifth-to-first wraparound, silence during audio priming/lobby/countdown/results, fresh-game reset, mute persistence, elapsed-position resume, blocked-playback recovery, and cancellation of late playback promises. Actual HTTP tests verify all five files, MP3 MIME type, HEAD requests, the two-byte range probe used by mobile playback, suffix ranges, invalid ranges, and rejection of unknown/traversal paths. File durations and valid MP3 format were read with the operating system’s audio inspector.
+
+On iPhone Safari, play a full round long enough to hear several transitions, verify the final track loops to the first, and check pause/mute/app switching and Tap for music fallback. Confirm that the lobby stays silent even after Ready.
+
+Browser playback verification passed with the actual MP3 files: Kokiri Forest started during gameplay, automatically advanced to Shop when it ended, mute/resume worked, and audio stopped at the result. The Daily menu had no playback controls or music. A mobile-sized preview displays the current numbered track. Physical iOS testing is still recommended.

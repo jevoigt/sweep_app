@@ -55,21 +55,32 @@ export function newPlayer(name, now = Date.now()) {
     left: false, wins: 0, seenAt: now };
 }
 
-function setBoard(room, difficulty) {
-  if (typeof difficulty !== 'string' || !Object.hasOwn(BOARD_OPTIONS, difficulty)) throw new GameError('Choose Easy, Medium, or Hard.');
-  const config = BOARD_OPTIONS[difficulty];
+export function boardSettings(difficulty, custom) {
+  if (difficulty === 'custom') {
+    const { rows, columns, mines } = custom || {};
+    if (![rows, columns, mines].every(Number.isInteger) || rows < 1 || rows > 50 || columns < 1 || columns > 50 || mines < 0 || mines > rows * columns) {
+      throw new GameError('Custom rows and columns must be whole numbers from 1 to 50. Mines must be from 0 to the total tile count.');
+    }
+    return { name: 'Custom', rows, columns, mines };
+  }
+  if (typeof difficulty !== 'string' || !Object.hasOwn(BOARD_OPTIONS, difficulty)) throw new GameError('Choose Easy, Medium, Hard, or Custom.');
+  return BOARD_OPTIONS[difficulty];
+}
+
+function setBoard(room, difficulty, custom) {
+  const config = boardSettings(difficulty, custom);
   Object.assign(room, config, { difficulty, safe: config.rows * config.columns - config.mines }, generateBoard(config));
   for (const p of room.players) {
     p.ready = false; p.revealed.clear(); p.flags.clear(); p.hit = null; p.forfeited = false;
   }
 }
 
-export function createRoom(code, name, now = Date.now(), difficulty = 'easy') {
+export function createRoom(code, name, now = Date.now(), difficulty = 'easy', custom) {
   const host = newPlayer(name, now);
   const room = { code, players: [host], host: host.id, phase: 'lobby', startAt: null,
     endAt: null, winner: null, leaders: [], reason: null, round: 1, revision: 0,
     createdAt: now, touchedAt: now };
-  setBoard(room, difficulty);
+  setBoard(room, difficulty, custom);
   return room;
 }
 
@@ -88,8 +99,14 @@ function topScores(players) {
 
 function resolve(room, now) {
   const eligible = room.players.filter(p => !p.forfeited);
-  const cleared = eligible.find(p => p.revealed.size === room.safe);
+  const cleared = room.safe > 0 && eligible.find(p => p.revealed.size === room.safe);
   if (cleared) return finish(room, [cleared], 'cleared', now);
+  if (room.kind === 'daily') {
+    const player = room.players[0];
+    if (player.hit !== null) finish(room, [], 'mine', now);
+    else if (player.forfeited) finish(room, [], 'abandoned', now);
+    return;
+  }
   const alive = eligible.filter(p => p.hit === null);
   if (!alive.length) return finish(room, topScores(eligible), eligible.length ? 'all-mines' : 'forfeit', now);
   if (alive.length === 1) {
@@ -108,6 +125,7 @@ export function advance(room, now = Date.now()) {
 }
 
 export function joinRoom(room, name, now = Date.now()) {
+  if (room.kind === 'daily') throw new GameError('Daily puzzles are solo. Create a multiplayer room to race friends.', 409);
   advance(room, now);
   if (room.players.filter(p => !p.left).length >= MAX_PLAYERS) throw new GameError('This room already has eight players.', 409);
   if (room.phase !== 'lobby') throw new GameError('This race has already started.', 409);
@@ -133,6 +151,7 @@ export function act(room, player, action, now = Date.now()) {
   advance(room, now);
   if (player.left) throw new GameError('You left this room.', 403);
   player.seenAt = now; room.touchedAt = now;
+  if (room.kind === 'daily' && !['reveal', 'flag', 'chord', 'forfeit'].includes(action.type)) throw new GameError('That action is not available in a daily puzzle.', 409);
   if (action.type === 'ready') {
     if (room.phase !== 'lobby') throw new GameError('The race has already started.', 409);
     player.ready = !player.ready;
@@ -144,12 +163,12 @@ export function act(room, player, action, now = Date.now()) {
   } else if (action.type === 'settings') {
     if (player.id !== room.host) throw new GameError('Only the host can choose the board.', 403);
     if (room.phase !== 'lobby') throw new GameError('Board settings are locked during a race.', 409);
-    setBoard(room, action.difficulty);
+    setBoard(room, action.difficulty, action.custom);
   } else if (action.type === 'lobby') {
     if (player.id !== room.host) throw new GameError('Only the host can open the next lobby.', 403);
     if (room.phase !== 'finished') throw new GameError('Finish this race first.', 409);
     room.players = room.players.filter(p => !p.left);
-    setBoard(room, room.difficulty);
+    setBoard(room, room.difficulty, room);
     room.round++; room.phase = 'lobby'; room.startAt = null; room.endAt = null;
     room.winner = null; room.leaders = []; room.reason = null;
   } else if (action.type === 'forfeit') {
@@ -194,6 +213,7 @@ export function view(room, player, now = Date.now()) {
     serverNow: now, startAt: room.startAt, endAt: room.endAt, host: room.host, maxPlayers: MAX_PLAYERS,
     winner: room.winner, leaders: room.leaders, reason: room.reason, difficulty: room.difficulty,
     rows: room.rows, columns: room.columns, mines: room.mines, safe: room.safe, you: player.id,
+    kind: room.kind || 'race', date: room.date || null,
     players: room.players.map(p => ({ id: p.id, name: p.name, ready: p.ready, revealed: p.revealed.size,
       hit: p.hit !== null, forfeited: p.forfeited, left: p.left, wins: p.wins, online: now - p.seenAt < 10000 })),
     board: room.board.map((value, i) => player.revealed.has(i) || i === player.hit || room.phase === 'finished' ? value : player.flags.has(i) ? -3 : -2),

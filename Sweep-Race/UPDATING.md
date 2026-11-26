@@ -20,20 +20,18 @@ The updated project is in **Downloads/Sweep-Race**. Its files are ready to uploa
 
 **Your public URL stays the same.** Deployment resets existing in-memory rooms, so create a new room to test the update.
 
-## What changed
+## What changed in this update
 
-- Quiet elevator-style music plays only during active gameplay, with a remembered mute control. Home, lobby, countdown, and result screens are silent.
-- Include the new `public/music.js` file when uploading this update.
+The supplied five MP3 files replace the synthesized background music. Playback order is Kokiri Forest → Shop → Market → Kakariko Village → Ocarina of Time → repeat. Each new game/attempt starts the sequence again. The lobby, countdown, and results remain silent; mute and the separate explosion effect remain available.
 
-- Smiling Minesweeper-mine homepage artwork.
-- **2–8 players** per room with a host-controlled start.
-- **Easy:** 9 rows × 9 columns, 10 mines.
-- **Medium:** 16 rows × 16 columns, 40 mines.
-- **Hard:** 30 rows × 16 columns, 99 mines.
-- Every round starts fully hidden, with exactly the selected mine count randomly scattered across the entire board. Everyone gets the same layout. The first click can hit a mine.
-- Large-board scrolling, tile zoom, and Fit controls. The old Opening button has been removed.
-- Live standings for the whole room and preserved scroll position during rival moves.
-- Multi-player frozen-score rules and first-clear immediate wins.
-- A new-round lobby for fresh boards and difficulty changes.
+**Upload the whole updated folder contents**, including:
 
-The build runs tests directly because the app has no external dependencies. It does not require `npm ci` or a lockfile on Render.
+- `public/music/` with **all five MP3 files** (about 10.3 MiB total).
+- The new `public/playlist.js` manifest.
+- Updated `public/music.js`, `public/app.js`, `server.mjs`, styles, and tests.
+
+Each MP3 is below GitHub’s browser-upload per-file limit. Keep the existing folder structure: the assets should appear at `Sweep-Race/public/music/` in your current repository. Upload the extracted files and folders, not a ZIP file as a single repository file.
+
+No extra music service, database, API key, or package install is required. Keep Render’s Build Command as `npm test` and Start Command as `npm start`. Music streaming uses hosting bandwidth. Your game URL stays unchanged.
+
+Existing Daily puzzles, per-browser attempt counts, custom boards, eight-player races, and tap/hold controls remain. Deployments still reset active in-memory runs.

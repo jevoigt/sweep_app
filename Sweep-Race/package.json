@@ -1,8 +1,8 @@
 {
   "name": "sweep-race",
-  "version": "1.2.0",
+  "version": "1.5.0",
   "private": true,
-  "description": "Minesweeper races for 2\u20138 players with invite codes and three board sizes.",
+  "description": "Daily Minesweeper and 2\u20138 player races with custom boards up to 50 by 50.",
   "type": "module",
   "engines": {
     "node": "22.x"

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f1f5f0">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="description" content="Race up to seven friends at Minesweeper. Three board sizes, the same randomly mined board, and live scores.">
+  <meta name="description" content="Daily Minesweeper, shareable results, and races for up to eight players. Preset or custom boards up to 50 by 50.">
   <title>Sweep Race — a little friendly rivalry</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
@@ -15,13 +15,13 @@
 <body>
   <div class="shell">
     <header class="topbar">
-      <a class="brand" href="/" aria-label="Sweep Race home"><span class="brand-icon" aria-hidden="true">⚑</span>Sweep Race</a>
+      <a class="brand" href="/" aria-label="Sweep Race home"><img class="brand-icon" src="/favicon.svg" alt="">Sweep Race</a>
       <button class="icon-button" id="help" aria-label="How to play">?</button>
     </header>
     <main id="app"><p class="loading">Getting the board ready…</p></main>
     <footer class="bottom-bar">
-      <button id="nav-play" class="nav-item selected"><span aria-hidden="true">⚑</span>PLAY</button>
-      <span class="footer-wordmark">A LITTLE FRIENDLY RIVALRY</span>
+      <button id="nav-play" class="nav-item selected"><span aria-hidden="true">♧</span>PLAY</button>
+      <button id="nav-daily" class="nav-item"><span aria-hidden="true">▦</span>DAILY</button>
       <button id="nav-rules" class="nav-item"><span aria-hidden="true">☷</span>RULES</button>
     </footer>
   </div>
@@ -31,9 +31,10 @@
     <h2>A familiar game.<br>A friendly rival.</h2>
     <ol class="rules-list">
       <li><strong>Invite your people.</strong> Share your six-character room code or invite link. Rooms hold 2–8 players. Everyone taps Ready, then the host starts the shared three-second countdown.</li>
-      <li><strong>Choose your field.</strong> Easy: 9 rows × 9 columns, 10 mines. Medium: 16 × 16, 40 mines. Hard: 30 rows × 16 columns, 99 mines. The host can change the choice in the lobby; everyone must ready up again.</li>
+      <li><strong>Choose your field.</strong> Easy: 9 × 9, 10 mines. Medium: 16 × 16, 40 mines. Hard: 30 rows × 16 columns, 99 mines. In Custom, the host chooses 1–50 rows, 1–50 columns, and 0 mines up to the total tile count. Changing the board in the lobby resets everyone’s Ready.</li>
+      <li><strong>The Daily field.</strong> A solo Medium board shared by everyone. It resets at 12:00 AM fixed EST (UTC−5), year-round. Finish or end an attempt to copy results. Retries are counted in this browser and included in the message, with a little attitude.</li>
       <li><strong>Same field. Separate boards.</strong> All tiles start hidden, and mines are randomly scattered across the entire board. Everyone gets the same layout. Your first click can hit a mine. Numbers count neighboring mines, including diagonals.</li>
-      <li><strong>Mark what you suspect.</strong> Switch to Flag mode, then tap tiles to mark or unmark them. On desktop, right-click or press F on a focused tile.</li>
+      <li><strong>Tap or hold.</strong> A short tap reveals a tile. Hold a covered tile still for about half a second to flag or unflag it. Dragging scrolls the board and cancels the hold. On desktop, right-click or press F on a focused tile.</li>
       <li><strong>Clear it to win.</strong> The first player to reveal all safe tiles ends the race immediately. Flags don’t add points.</li>
       <li><strong>A mine freezes your score.</strong> Remaining players keep racing. The last survivor wins once they pass every frozen score. If everyone hits a mine, the highest safe-tile count wins; tied top scores draw. A player who concedes cannot win.</li>
       <li><strong>Big board, small screen.</strong> Use + and − to resize tiles or Fit to see the full width. Drag inside the board to scroll. Your browser’s pinch zoom still works.</li>

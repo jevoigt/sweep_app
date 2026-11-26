@@ -1,9 +1,12 @@
 import http from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { PLAYLIST } from './public/playlist.js';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { randomInt } from 'node:crypto';
 import { createRoom, joinRoom, leaveRoom, act, view, GameError } from './game.mjs';
+import { createDailyRoom, dailyDate, dailyReset } from './daily.mjs';
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const IDLE_MS = 60 * 60 * 1000;
@@ -12,6 +15,10 @@ const ASSETS = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
   '/music.js': ['music.js', 'text/javascript; charset=utf-8'],
+  '/playlist.js': ['playlist.js', 'text/javascript; charset=utf-8'],
+  '/gestures.js': ['gestures.js', 'text/javascript; charset=utf-8'],
+  '/daily-results.js': ['daily-results.js', 'text/javascript; charset=utf-8'],
+  '/effects.js': ['effects.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
   '/favicon.svg': ['favicon.svg', 'image/svg+xml'],
   '/field.svg': ['field.svg', 'image/svg+xml'],
@@ -70,13 +77,17 @@ export function createGameServer() {
         const address = req.socket.remoteAddress || 'unknown';
         // The global connection address is only a coarse upper bound behind a proxy.
         limited(`all:${address}`, 24000);
-        if (req.method === 'POST' && url.pathname === '/api/rooms') {
+        if (req.method === 'GET' && url.pathname === '/api/daily') {
+          const now = Date.now();
+          return json(res, 200, { date: dailyDate(now), resetAt: dailyReset(now), serverNow: now, rows: 16, columns: 16, mines: 40 });
+        }
+        if (req.method === 'POST' && ['/api/rooms', '/api/daily/start'].includes(url.pathname)) {
           limited(`create:${address}`, 100);
           const input = await body(req);
           if (rooms.size >= ROOM_LIMIT) throw new GameError('The server is full. Try again later.', 503);
           let code;
           do { code = Array.from({ length: 6 }, () => ALPHABET[randomInt(ALPHABET.length)]).join(''); } while (rooms.has(code));
-          const room = createRoom(code, cleanName(input.name), Date.now(), input.difficulty ?? 'easy');
+          const room = url.pathname === '/api/daily/start' ? createDailyRoom(code, cleanName(input.name)) : createRoom(code, cleanName(input.name), Date.now(), input.difficulty ?? 'easy', input.custom);
           rooms.set(code, room);
           return json(res, 201, { token: room.players[0].token, state: view(room, room.players[0]) });
         }
@@ -116,6 +127,27 @@ export function createGameServer() {
         throw new GameError('Method not allowed.', 405);
       }
       if (req.method !== 'GET' && req.method !== 'HEAD') throw new GameError('Method not allowed.', 405);
+      if (url.pathname.startsWith('/music/')) {
+        let filename;
+        try { filename = decodeURIComponent(url.pathname.slice('/music/'.length)); } catch { throw new GameError('Invalid audio URL.'); }
+        if (!PLAYLIST.some(track => track.file === filename)) throw new GameError('Track not found.', 404);
+        const path = new URL(`./public/music/${encodeURIComponent(filename)}`, import.meta.url);
+        const { size } = await stat(path);
+        let start = 0, end = size - 1, partial = false;
+        if (req.headers.range) {
+          const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
+          if (!range || (!range[1] && !range[2])) { res.writeHead(416, { 'Content-Range': `bytes */${size}` }); return res.end(); }
+          if (!range[1]) start = Math.max(0, size - Number(range[2]));
+          else { start = Number(range[1]); if (range[2]) end = Math.min(end, Number(range[2])); }
+          if (![start,end].every(Number.isSafeInteger) || start < 0 || start >= size || end < start || (!range[1] && Number(range[2]) === 0)) { res.writeHead(416, { 'Content-Range': `bytes */${size}` }); return res.end(); }
+          partial = true;
+        }
+        res.writeHead(partial ? 206 : 200, { 'Content-Type': 'audio/mpeg', 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1, 'Cache-Control': 'public, max-age=3600', ...(partial ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}) });
+        if (req.method === 'HEAD') return res.end();
+        const stream = createReadStream(path, { start, end });
+        stream.on('error', () => res.destroy()); res.on('close', () => stream.destroy()); stream.pipe(res);
+        return;
+      }
       const asset = ASSETS[url.pathname];
       if (!asset) throw new GameError('Page not found.', 404);
       const bytes = await readFile(new URL(`./public/${asset[0]}`, import.meta.url));

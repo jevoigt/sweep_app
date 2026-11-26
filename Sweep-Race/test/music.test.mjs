@@ -1,91 +1,73 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ElevatorMusic } from '../public/music.js';
-
-function fixture(initialPreference = 'on') {
-  const values = new Map([['sweep-music', initialPreference]]), voices = [], timers = new Set();
-  let contexts = 0, resumes = 0;
-  const param = () => ({ value: 0, setValueAtTime() {}, exponentialRampToValueAtTime() {} });
-  const context = { state: 'suspended', currentTime: 1, destination: {},
-    createGain: () => ({ gain: param(), connect() {}, disconnect() {} }),
-    createOscillator() {
-      const voice = { frequency: param(), connect() {}, disconnect() {}, start() { this.started = true; }, stop(at) { if (at === undefined) this.cancelled = true; } };
-      voices.push(voice); return voice;
-    },
-    resume() { resumes++; this.state = 'running'; return Promise.resolve(); },
-  };
-  const music = new ElevatorMusic({ createContext: () => { contexts++; return context; },
-    every: fn => { timers.add(fn); return fn; }, cancel: id => timers.delete(id),
-    storage: { get: key => values.get(key), set: (key, value) => values.set(key, value) },
-  });
-  const update = (phase, extra = {}) => music.update({ phase, visible: true, connected: true, ...extra });
-  return { music, context, voices, timers, values, update, contexts: () => contexts, resumes: () => resumes };
+import { GameMusic } from '../public/music.js';
+import { PLAYLIST } from '../public/playlist.js';
+const settle = async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); };
+function fixture(preference = 'on') {
+ const values=new Map([['sweep-music',preference]]);let now=1000,plays=0,pauses=0,fail=false;
+ const audio={src:'',currentTime:0,setAttribute(){},play(){plays++;return fail?Promise.reject(new Error('autoplay')):Promise.resolve();},pause(){pauses++;this.onpause?.();}};
+ const gain={gain:{value:0},connect(){}};
+ const context={state:'suspended',destination:{},createGain:()=>gain,createMediaElementSource:()=>({connect(){}}),resume(){this.state='running';return Promise.resolve();}};
+ const tracks=Array.from({length:5},(_,i)=>({file:`${i+1}.mp3`,title:`Track ${i+1}`,duration:10}));
+ const music=new GameMusic({tracks,createAudio:()=>audio,createContext:()=>context,now:()=>now,storage:{get:k=>values.get(k),set:(k,v)=>values.set(k,v)}});
+ const update=(phase,extra={})=>music.update({phase,visible:true,connected:true,...extra});
+ return{music,audio,gain,context,values,update,plays:()=>plays,pauses:()=>pauses,clock:ms=>{now+=ms;},fail:value=>{fail=value;}};
 }
 
-test('home, lobby and countdown are silent even after Ready unlocks audio', () => {
-  const f = fixture();
-  for (const phase of ['home', 'lobby', 'countdown']) { f.update(phase); f.music.unlock(); assert.equal(f.music.playing, false); }
-  assert.equal(f.voices.length, 0); assert.equal(f.timers.size, 0);
-  assert.equal(f.contexts(), 1); assert.equal(f.resumes(), 1);
+test('playlist contains the five supplied tracks in their numbered order',()=>{
+ assert.deepEqual(PLAYLIST.map(t=>t.title),['Kokiri Forest','Shop','Market','Kakariko Village','Ocarina of Time']);
+ assert.ok(PLAYLIST.every(t=>t.duration>0&&t.file.endsWith('.mp3')));
 });
 
-test('active gameplay starts exactly one loop after a user gesture', () => {
-  const f = fixture(); f.update('playing');
-  assert.equal(f.music.playing, false); assert.equal(f.contexts(), 0, 'no automatic context creation');
-  f.music.unlock(); assert.equal(f.music.playing, true);
-  assert.ok(f.voices.some(v => v.started)); assert.equal(f.timers.size, 1);
-  f.update('playing'); f.music.unlock(); assert.equal(f.timers.size, 1);
+test('home, lobby and countdown never output audible music, including audio priming',async()=>{
+ const f=fixture();
+ for(const phase of ['home','lobby','countdown']){f.update(phase);f.music.unlock();assert.equal(f.gain.gain.value,0);await settle();assert.equal(f.music.playing,false);assert.equal(f.gain.gain.value,0);}
 });
 
-test('returning to lobby or finishing cancels the loop and all scheduled notes', () => {
-  for (const phase of ['lobby', 'finished', 'home', 'countdown']) {
-    const f = fixture(); f.music.unlock(); f.update('playing');
-    assert.ok(f.voices.length > 0);
-    f.update(phase);
-    assert.equal(f.music.playing, false); assert.equal(f.timers.size, 0);
-    assert.ok(f.voices.every(v => v.cancelled));
-  }
+test('gameplay starts the first track automatically after Ready primes the player',async()=>{
+ const f=fixture();f.update('lobby',{key:'room:1',elapsedMs:0});f.music.unlock();await settle();
+ f.update('playing',{key:'room:1',elapsedMs:0});await settle();
+ assert.equal(f.music.playing,true);assert.match(f.audio.src,/1\.mp3$/);assert.equal(f.gain.gain.value,.22);
 });
 
-test('mute preference persists and unmuting during play resumes music', () => {
-  const f = fixture(); f.music.unlock(); f.update('playing'); f.music.toggle();
-  assert.equal(f.music.playing, false); assert.equal(f.values.get('sweep-music'), 'off');
-  f.update('lobby'); f.update('playing'); assert.equal(f.music.playing, false);
-  f.music.toggle(); assert.equal(f.music.playing, true); assert.equal(f.values.get('sweep-music'), 'on');
-  const muted = fixture('off'); muted.music.unlock(); muted.update('playing');
-  assert.equal(muted.contexts(), 0); assert.equal(muted.music.playing, false);
+test('ended events advance through all five tracks and loop back to the first',async()=>{
+ const f=fixture();f.update('playing',{key:'a',elapsedMs:0});f.music.unlock();await settle();
+ for(const expected of [1,2,3,4,0,1]){f.audio.onended();await settle();assert.equal(f.music.index,expected);assert.equal(f.music.playing,true);}
 });
 
-test('background tabs and disconnected games are silent', () => {
-  for (const extra of [{ visible: false }, { connected: false }]) {
-    const f = fixture(); f.music.unlock(); f.update('playing');
-    f.update('playing', extra); assert.equal(f.music.playing, false); assert.equal(f.timers.size, 0);
-    f.update('playing'); assert.equal(f.music.playing, true);
-  }
+test('result, lobby, home, and countdown pause media and immediately silence the output',async()=>{
+ for(const phase of ['finished','lobby','home','countdown']){const f=fixture();f.update('playing');f.music.unlock();await settle();f.update(phase);assert.equal(f.music.playing,false);assert.equal(f.gain.gain.value,0);assert.ok(f.pauses()>0);}
 });
 
-test('interrupted audio can be restarted by a tap, without toggling mute', () => {
-  const f = fixture(); f.music.unlock(); f.update('playing');
-  f.context.state = 'interrupted'; f.context.onstatechange(); assert.equal(f.music.playing, false);
-  f.music.toggle(); assert.equal(f.context.state, 'running'); assert.equal(f.music.playing, true); assert.equal(f.music.enabled, true);
+test('each new game resets the playlist to track one',async()=>{
+ const f=fixture();f.update('playing',{key:'room:1',elapsedMs:0});f.music.unlock();await settle();f.audio.onended();await settle();assert.equal(f.music.index,1);
+ f.update('countdown',{key:'room:2',elapsedMs:0});f.update('playing',{key:'room:2',elapsedMs:0});await settle();assert.equal(f.music.index,0);assert.equal(f.music.playing,true);
 });
 
-test('unavailable audio does not break the game', () => {
-  const music = new ElevatorMusic({ createContext: () => { throw new Error('not supported'); } });
-  assert.doesNotThrow(() => music.unlock()); assert.equal(music.unavailable, true);
-  music.update({ phase: 'playing', visible: true, connected: true }); assert.equal(music.playing, false);
+test('mute persists; unmuting rejoins the current session position without resetting its order',async()=>{
+ const f=fixture();f.update('playing',{key:'room:1',elapsedMs:0});f.music.unlock();await settle();f.music.toggle();assert.equal(f.values.get('sweep-music'),'off');assert.equal(f.gain.gain.value,0);
+ f.update('playing',{key:'room:1',elapsedMs:23000});f.music.toggle();await settle();assert.equal(f.music.index,2);assert.equal(f.audio.currentTime,3);assert.equal(f.music.playing,true);
+ const muted=fixture('off');muted.music.unlock();assert.equal(muted.music.audio,null);
 });
 
-test('default browser timers keep the global receiver', () => {
-  const originalEvery = globalThis.setInterval, originalCancel = globalThis.clearInterval;
-  const f = fixture(); let scheduled = 0, cancelled = 0;
-  try {
-    globalThis.setInterval = function () { assert.equal(this, globalThis); scheduled++; return 123; };
-    globalThis.clearInterval = function (id) { assert.equal(this, globalThis); assert.equal(id, 123); cancelled++; };
-    const music = new ElevatorMusic({ createContext: () => f.context });
-    music.unlock(); music.update({ phase: 'playing', visible: true, connected: true });
-    assert.equal(scheduled, 1);
-    music.update({ phase: 'lobby', visible: true, connected: true });
-    assert.equal(cancelled, 1);
-  } finally { globalThis.setInterval = originalEvery; globalThis.clearInterval = originalCancel; }
+test('hidden/disconnected games are silent; return resumes at the elapsed playlist position',async()=>{
+ for(const extra of [{visible:false},{connected:false}]){const f=fixture();f.update('playing',{elapsedMs:0});f.music.unlock();await settle();f.update('playing',extra);assert.equal(f.music.playing,false);assert.equal(f.gain.gain.value,0);f.update('playing',{elapsedMs:44000});await settle();assert.equal(f.music.index,4);assert.equal(f.audio.currentTime,4);}
+});
+
+test('autoplay rejection is recoverable with a user tap',async()=>{
+ const f=fixture();f.fail(true);f.update('playing');f.music.unlock();await settle();assert.equal(f.music.playing,false);assert.equal(f.music.blocked,true);assert.equal(f.music.unavailable,false);
+ const attempts=f.plays();f.update('playing');await settle();assert.equal(f.plays(),attempts);
+ f.fail(false);f.music.toggle();await settle();assert.equal(f.music.playing,true);assert.equal(f.music.enabled,true);
+});
+
+test('a delayed play promise cannot cause sound after the game has ended',async()=>{
+ const f=fixture();let resolve;f.audio.play=()=>new Promise(done=>{resolve=done;});f.update('playing');f.music.unlock();f.update('finished');resolve();await settle();assert.equal(f.music.playing,false);assert.equal(f.gain.gain.value,0);
+});
+
+test('unavailable audio cannot break gameplay',()=>{
+ const music=new GameMusic({createAudio:()=>{throw new Error('unsupported');}});assert.doesNotThrow(()=>music.unlock());assert.equal(music.unavailable,true);
+});
+
+test('muting while a track is loading cancels its eventual playback',async()=>{
+ const f=fixture();let resolve;f.audio.play=()=>new Promise(done=>{resolve=done;});f.update('playing');f.music.unlock();assert.equal(f.music.pending,true);f.music.toggle();assert.equal(f.music.enabled,false);resolve();await settle();assert.equal(f.music.playing,false);assert.equal(f.gain.gain.value,0);
 });
